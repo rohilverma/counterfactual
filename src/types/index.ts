@@ -37,7 +37,7 @@ export interface PortfolioDataPoint {
   date: string;
   portfolioValue: number;
   counterfactualValue: number;
-  costBasis: number;
+  totalDeposits: number;
   portfolioReturn: number;
   counterfactualReturn: number;
 }

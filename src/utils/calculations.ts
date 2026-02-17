@@ -254,7 +254,7 @@ export function calculatePortfolioTimeSeries(
         date: currentDate,
         portfolioValue: Math.round(portfolioValue * 100) / 100,
         counterfactualValue: Math.round(counterfactualValue * 100) / 100,
-        costBasis: Math.round(costBasis * 100) / 100,
+        totalDeposits: Math.round(costBasis * 100) / 100,
         portfolioReturn: Math.round(portfolioReturn * 100) / 100,
         counterfactualReturn: Math.round(counterfactualReturn * 100) / 100,
       });
