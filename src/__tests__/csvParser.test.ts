@@ -55,23 +55,36 @@ AAPL,2023-06-15,10,185,buy`;
     }
   });
 
-  it('Robinhood and Fidelity both produce a $5000 deposit on 2023-06-15', () => {
+  it('all formats produce a deposit cash flow on 2023-06-15', () => {
+    const simple = parseCSV(simpleCSV);
+    const robinhood = parseCSV(robinhoodCSV);
+    const schwab = parseCSV(schwabCSV);
+    const fidelity = parseCSV(fidelityCSV);
+
+    for (const result of [simple, robinhood, schwab, fidelity]) {
+      const deposit = findCashFlow(result.cashFlows, 'deposit', '2023-06-15');
+      expect(deposit, `expected deposit in ${JSON.stringify(result.cashFlows)}`).toBeDefined();
+    }
+  });
+
+  it('Robinhood and Fidelity deposits reflect the explicit deposit amount', () => {
     const robinhood = parseCSV(robinhoodCSV);
     const fidelity = parseCSV(fidelityCSV);
 
     for (const result of [robinhood, fidelity]) {
       const deposit = findCashFlow(result.cashFlows, 'deposit', '2023-06-15');
-      expect(deposit, `expected deposit in ${JSON.stringify(result.cashFlows)}`).toBeDefined();
       expect(deposit!.amount).toBe(5000);
     }
   });
 
-  it('simple and Schwab formats produce no cash flows', () => {
+  it('simple and Schwab deposits equal shares * price (trade value)', () => {
     const simple = parseCSV(simpleCSV);
     const schwab = parseCSV(schwabCSV);
 
-    expect(simple.cashFlows).toHaveLength(0);
-    expect(schwab.cashFlows).toHaveLength(0);
+    for (const result of [simple, schwab]) {
+      const deposit = findCashFlow(result.cashFlows, 'deposit', '2023-06-15');
+      expect(deposit!.amount).toBe(1850); // 10 * 185
+    }
   });
 });
 
@@ -156,6 +169,28 @@ AAPL,01/15/2023,10`;
     expect(parseCSV(csv).trades[0].date).toBe('2023-01-15');
   });
 
+  it('synthesizes a deposit for buy trades with a known price', () => {
+    const csv = `ticker,date,shares,price
+AAPL,2023-01-15,10,142.50`;
+    const result = parseCSV(csv);
+    expect(result.cashFlows).toHaveLength(1);
+    expect(result.cashFlows[0].type).toBe('deposit');
+    expect(result.cashFlows[0].amount).toBe(1425); // 10 * 142.50
+    expect(result.cashFlows[0].date).toBe('2023-01-15');
+  });
+
+  it('does not synthesize a deposit for sell trades', () => {
+    const csv = `ticker,date,shares,price,type
+AAPL,2023-01-15,10,150,sell`;
+    expect(parseCSV(csv).cashFlows).toHaveLength(0);
+  });
+
+  it('does not synthesize a deposit when price is missing', () => {
+    const csv = `ticker,date,shares
+AAPL,2023-01-15,10`;
+    expect(parseCSV(csv).cashFlows).toHaveLength(0);
+  });
+
   it('leaves price undefined when column is empty', () => {
     const csv = `ticker,date,shares,price
 NVDA,2023-04-05,15,`;
@@ -236,6 +271,22 @@ describe('Schwab format', () => {
     const csv = `Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
 01/15/2022,Stock Plan Activity,FB,"Vest",50,$300.00,$0.00,"$15,000.00"`;
     expect(parseCSV(csv).trades[0].ticker).toBe('META');
+  });
+
+  it('synthesizes a deposit for each vest with a known price', () => {
+    const csv = `Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
+01/15/2023,Stock Plan Activity,MSFT,"Vest",100,$250.00,$0.00,"$25,000.00"`;
+    const result = parseCSV(csv);
+    expect(result.cashFlows).toHaveLength(1);
+    expect(result.cashFlows[0].type).toBe('deposit');
+    expect(result.cashFlows[0].amount).toBe(25000); // 100 * 250
+  });
+
+  it('does not synthesize a deposit when price is missing', () => {
+    const csv = `Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
+01/15/2023,Stock Plan Activity,MSFT,"Vest",100,,$0.00,`;
+    const result = parseCSV(csv);
+    expect(result.cashFlows).toHaveLength(0);
   });
 });
 

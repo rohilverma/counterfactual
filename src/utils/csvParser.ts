@@ -343,6 +343,7 @@ function parseSchwabCSV(lines: string[]): PortfolioData {
   const priceIndex = header.indexOf('price');
 
   const trades: Trade[] = [];
+  const cashFlows: CashFlow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -378,11 +379,19 @@ function parseSchwabCSV(lines: string[]): PortfolioData {
       type: 'buy',
       ...(isNaN(price) ? {} : { price }),
     });
+
+    // Synthesize a deposit for the vest value (shares * price)
+    if (!isNaN(price) && price > 0) {
+      cashFlows.push({
+        id: `cashflow-${date}-${i}`,
+        date,
+        amount: quantity * price,
+        type: 'deposit',
+      });
+    }
   }
 
-  // For Schwab RSU vests, the "cost basis" is the vest value (shares * price)
-  // We don't have separate deposit records, so we don't add cash flows
-  return { trades, cashFlows: [] };
+  return { trades, cashFlows };
 }
 
 // Parse simple CSV format (ticker, date, shares, price)
@@ -400,6 +409,7 @@ function parseSimpleCSV(lines: string[]): PortfolioData {
   }
 
   const trades: Trade[] = [];
+  const cashFlows: CashFlow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -427,9 +437,19 @@ function parseSimpleCSV(lines: string[]): PortfolioData {
       type,
       ...(isNaN(price) ? {} : { price }),
     });
+
+    // Synthesize a deposit for buy trades with a known price
+    if (type === 'buy' && !isNaN(price) && price > 0) {
+      cashFlows.push({
+        id: `cashflow-${date}-${i}`,
+        date,
+        amount: shares * price,
+        type: 'deposit',
+      });
+    }
   }
 
-  return { trades, cashFlows: [] };
+  return { trades, cashFlows };
 }
 
 export function parseCSV(csvText: string): PortfolioData {
