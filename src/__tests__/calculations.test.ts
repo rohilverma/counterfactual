@@ -62,7 +62,7 @@ describe('total deposit value', () => {
     ];
     const result = calculatePortfolioTimeSeries(trades, { AAPL: aaplPrices }, spyPrices, cashFlows);
     const point = result.find(p => p.date === '2023-01-02');
-    expect(point!.costBasis).toBe(2000);
+    expect(point!.totalDeposits).toBe(2000);
   });
 
   it('cost basis accumulates across multiple deposits', () => {
@@ -77,17 +77,17 @@ describe('total deposit value', () => {
     const result = calculatePortfolioTimeSeries(trades, { AAPL: aaplPrices }, spyPrices, cashFlows);
 
     const beforeSecond = result.find(p => p.date === '2023-01-03');
-    expect(beforeSecond!.costBasis).toBe(1500);
+    expect(beforeSecond!.totalDeposits).toBe(1500);
 
     const afterSecond = result.find(p => p.date === '2023-01-04');
-    expect(afterSecond!.costBasis).toBe(2300);
+    expect(afterSecond!.totalDeposits).toBe(2300);
   });
 
   it('cost basis falls back to trade cost when no cash flows', () => {
     const trades = [makeTrade({ ticker: 'AAPL', date: '2023-01-02', shares: 10, price: 130 })];
     const result = calculatePortfolioTimeSeries(trades, { AAPL: aaplPrices }, spyPrices);
     const point = result.find(p => p.date === '2023-01-02');
-    expect(point!.costBasis).toBe(1300);
+    expect(point!.totalDeposits).toBe(1300);
   });
 
   it('sell reduces the trade-based cost basis', () => {
@@ -98,7 +98,7 @@ describe('total deposit value', () => {
     const result = calculatePortfolioTimeSeries(trades, { AAPL: aaplPrices }, spyPrices);
     const afterSell = result.find(p => p.date === '2023-01-04');
     // Trade cost basis: 10*130 - 5*135 = 1300 - 675 = 625
-    expect(afterSell!.costBasis).toBe(625);
+    expect(afterSell!.totalDeposits).toBe(625);
   });
 });
 
