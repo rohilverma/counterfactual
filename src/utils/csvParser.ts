@@ -1,4 +1,4 @@
-import type { Trade, CashFlow, PortfolioData, CashFlowType } from '../types';
+import type { Trade, CashFlow, PortfolioData, CashFlowType, CsvFormat } from '../types';
 import { perf } from './logger';
 
 // Parse CSV line handling quoted fields
@@ -463,23 +463,29 @@ export function parseCSV(csvText: string): PortfolioData {
   const header = parseCSVLine(lines[0]);
 
   let result: PortfolioData;
+  let format: CsvFormat;
   if (isRobinhoodFormat(header)) {
+    format = 'robinhood';
     perf.start('parseCSV:robinhood');
     result = parseRobinhoodCSV(csvText);
     perf.end('parseCSV:robinhood');
   } else if (isFidelityFormat(header)) {
+    format = 'fidelity';
     perf.start('parseCSV:fidelity');
     result = parseFidelityCSV(csvText);
     perf.end('parseCSV:fidelity');
   } else if (isSchwabFormat(header)) {
+    format = 'schwab';
     perf.start('parseCSV:schwab');
     result = parseSchwabCSV(lines);
     perf.end('parseCSV:schwab');
   } else {
+    format = 'simple';
     perf.start('parseCSV:simple');
     result = parseSimpleCSV(lines);
     perf.end('parseCSV:simple');
   }
+  result.format = format;
 
   perf.end('parseCSV:total');
   return result;

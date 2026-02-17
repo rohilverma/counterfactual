@@ -19,9 +19,12 @@ export interface CashFlow {
   ticker?: string; // For dividends, which stock paid it
 }
 
+export type CsvFormat = 'robinhood' | 'fidelity' | 'schwab' | 'simple';
+
 export interface PortfolioData {
   trades: Trade[];
   cashFlows: CashFlow[];
+  format?: CsvFormat;
 }
 
 export interface StockPrice {

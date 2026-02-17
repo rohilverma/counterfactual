@@ -93,36 +93,28 @@ AAPL,2023-06-15,10,185,buy`;
 // ============================================================
 
 describe('format routing', () => {
-  it('routes to simple parser when headers are ticker,date,shares', () => {
+  it('identifies simple format', () => {
     const csv = `ticker,date,shares
 AAPL,2023-01-15,10`;
-    const result = parseCSV(csv);
-    expect(result.trades).toHaveLength(1);
-    expect(result.trades[0].ticker).toBe('AAPL');
+    expect(parseCSV(csv).format).toBe('simple');
   });
 
-  it('routes to Robinhood parser when headers include Activity Date and Trans Code', () => {
+  it('identifies Robinhood format', () => {
     const csv = `Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount
 01/15/2023,01/15/2023,01/18/2023,GOOG,Alphabet,Buy,5,$94.00,($470.00)`;
-    const result = parseCSV(csv);
-    expect(result.trades).toHaveLength(1);
-    expect(result.trades[0].ticker).toBe('GOOG');
+    expect(parseCSV(csv).format).toBe('robinhood');
   });
 
-  it('routes to Schwab parser when headers include Action and Symbol and Quantity', () => {
+  it('identifies Schwab format', () => {
     const csv = `Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
 01/15/2023,Stock Plan Activity,MSFT,"Vest",100,$250.00,$0.00,"$25,000.00"`;
-    const result = parseCSV(csv);
-    expect(result.trades).toHaveLength(1);
-    expect(result.trades[0].ticker).toBe('MSFT');
+    expect(parseCSV(csv).format).toBe('schwab');
   });
 
-  it('routes to Fidelity parser when headers include Run Date and Amount ($)', () => {
+  it('identifies Fidelity format', () => {
     const csv = `Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
 01/15/2023,YOU BOUGHT APPLE INC,AAPL,,Cash,10,142.50,0,,,"(1,425.00)",01/18/2023`;
-    const result = parseCSV(csv);
-    expect(result.trades).toHaveLength(1);
-    expect(result.trades[0].ticker).toBe('AAPL');
+    expect(parseCSV(csv).format).toBe('fidelity');
   });
 });
 
