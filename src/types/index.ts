@@ -24,7 +24,7 @@ export type CsvFormat = 'robinhood' | 'fidelity' | 'schwab' | 'simple';
 export interface PortfolioData {
   trades: Trade[];
   cashFlows: CashFlow[];
-  format?: CsvFormat;
+  format: CsvFormat;
 }
 
 export interface StockPrice {
