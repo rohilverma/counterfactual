@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -18,6 +19,10 @@ function logToFile(message: string) {
 const yahooFinance = new YahooFinance()
 
 export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+  },
   plugins: [
     react(),
     tailwindcss(),
