@@ -307,6 +307,20 @@ function parseFidelityCSV(csvText: string): PortfolioData {
       continue;
     }
 
+    // Handle deposits
+    if (actionUpper.includes('ELECTRONIC FUNDS TRANSFER RECEIVED') ||
+        actionUpper.includes('TRANSFERRED FROM TO BROKERAGE')) {
+      if (isNaN(amount) || amount <= 0) continue;
+
+      cashFlows.push({
+        id: `cashflow-${date}-${i}`,
+        date,
+        amount,
+        type: 'deposit',
+      });
+      continue;
+    }
+
     // Handle dividends
     if (actionUpper.startsWith('DIVIDEND RECEIVED')) {
       if (isNaN(amount) || amount <= 0) continue;
