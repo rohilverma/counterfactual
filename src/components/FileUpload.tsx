@@ -38,7 +38,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         const updated = [...prev, ...newFiles];
         const allTrades = updated.flatMap(f => f.trades);
         const allCashFlows = updated.flatMap(f => f.cashFlows);
-        onDataLoaded({ trades: allTrades, cashFlows: allCashFlows });
+        onDataLoaded({ trades: allTrades, cashFlows: allCashFlows, format: 'simple' });
         return updated;
       });
     }
@@ -49,14 +49,14 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
       const updated = prev.filter((_, i) => i !== index);
       const allTrades = updated.flatMap(f => f.trades);
       const allCashFlows = updated.flatMap(f => f.cashFlows);
-      onDataLoaded({ trades: allTrades, cashFlows: allCashFlows });
+      onDataLoaded({ trades: allTrades, cashFlows: allCashFlows, format: 'simple' });
       return updated;
     });
   }, [onDataLoaded]);
 
   const clearAll = useCallback(() => {
     setUploadedFiles([]);
-    onDataLoaded({ trades: [], cashFlows: [] });
+    onDataLoaded({ trades: [], cashFlows: [], format: 'simple' });
   }, [onDataLoaded]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {

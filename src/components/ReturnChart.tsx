@@ -54,7 +54,7 @@ export function ReturnChart({ data }: ReturnChartProps) {
           />
           <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />
           <Tooltip
-            formatter={(value: number) => [`${value.toFixed(2)}%`]}
+            formatter={(value: number | undefined) => [`${(value ?? 0).toFixed(2)}%`]}
             labelFormatter={(label) => new Date(label).toLocaleDateString()}
             contentStyle={{
               backgroundColor: 'white',

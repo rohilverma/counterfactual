@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { Trade, CashFlow, PortfolioData } from '../types';
+import type { Trade, PortfolioData } from '../types';
 import { useStockData } from '../hooks/useStockData';
 import { FileUpload } from './FileUpload';
 import { ManualEntry } from './ManualEntry';
@@ -13,7 +13,7 @@ type InputMode = 'upload' | 'manual' | 'csv-builder';
 
 export function Dashboard() {
   const [inputMode, setInputMode] = useState<InputMode>('upload');
-  const [portfolioData, setPortfolioData] = useState<PortfolioData>({ trades: [], cashFlows: [] });
+  const [portfolioData, setPortfolioData] = useState<PortfolioData>({ trades: [], cashFlows: [], format: 'simple' });
   const { loading, error, timeSeriesData, breakdownData, summaryData, loadData } = useStockData();
 
   const handleDataLoaded = useCallback((data: PortfolioData) => {
@@ -34,7 +34,7 @@ export function Dashboard() {
   }, [portfolioData, loadData]);
 
   const handleClear = useCallback(() => {
-    setPortfolioData({ trades: [], cashFlows: [] });
+    setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
   }, []);
 
   // Debounce auto-analyze to wait for all files to be processed
@@ -145,7 +145,7 @@ export function Dashboard() {
               <h2 className="text-xl font-semibold text-gray-900">Portfolio Analysis</h2>
               <button
                 onClick={() => {
-                  setPortfolioData({ trades: [], cashFlows: [] });
+                  setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
                   window.location.reload();
                 }}
                 className="py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
