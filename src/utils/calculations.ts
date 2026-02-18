@@ -1,15 +1,6 @@
 import type { Trade, StockPrice, StockSplit, PortfolioDataPoint, StockBreakdownData, SummaryData, CashFlow } from '../types';
 import { getPriceOnDate, getLatestPrice } from './stockApi';
 
-// Build a date-indexed price map for O(1) lookups
-function buildPriceMap(prices: StockPrice[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const p of prices) {
-    map.set(p.date, p.price);
-  }
-  return map;
-}
-
 // Get price on or before date using sorted array (binary search approach)
 function getPriceOnOrBefore(prices: StockPrice[], targetDate: string): number | null {
   if (prices.length === 0) return null;
@@ -373,12 +364,21 @@ export function calculateSummary(
     };
   }
 
-  // Calculate total invested from trades (net of buys and sells)
-  let totalCostBasis = trades.reduce((sum, t) => {
-    const amount = t.shares * (t.price ?? 0);
-    return sum + (t.type === 'sell' ? -amount : amount);
-  }, 0);
-  totalCostBasis = Math.max(0, totalCostBasis);
+  // Calculate total invested from cash flows if available, otherwise from trades
+  const totalCashInflows = cashFlows.reduce((sum, cf) => sum + cf.amount, 0);
+  let totalCostBasis: number;
+
+  if (totalCashInflows > 0) {
+    // Use cash inflows (deposits + dividends + cap gains) as cost basis
+    totalCostBasis = totalCashInflows;
+  } else {
+    // Fallback: calculate from trades (net of buys and sells)
+    totalCostBasis = trades.reduce((sum, t) => {
+      const amount = t.shares * (t.price ?? 0);
+      return sum + (t.type === 'sell' ? -amount : amount);
+    }, 0);
+    totalCostBasis = Math.max(0, totalCostBasis);
+  }
 
   const totalPortfolioValue = breakdown.reduce((sum, b) => sum + b.currentValue, 0);
   const totalCounterfactualValue = breakdown.reduce((sum, b) => sum + b.spyCurrentValue, 0);

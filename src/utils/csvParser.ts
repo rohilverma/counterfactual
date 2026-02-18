@@ -1,4 +1,4 @@
-import type { Trade, CashFlow, PortfolioData, CashFlowType, CsvFormat } from '../types';
+import type { Trade, CashFlow, PortfolioData, CashFlowType } from '../types';
 import { perf } from './logger';
 
 // Parse CSV line handling quoted fields
@@ -122,7 +122,7 @@ function getCashFlowType(transCode: string): CashFlowType | null {
 // Parse Robinhood CSV
 function parseRobinhoodCSV(csvText: string): PortfolioData {
   const rows = parseMultiLineCSV(csvText);
-  if (rows.length < 2) return { trades: [], cashFlows: [] };
+  if (rows.length < 2) return { trades: [], cashFlows: [], format: 'robinhood' };
 
   const header = rows[0].map(h => h.toLowerCase());
   const dateIndex = header.indexOf('activity date');
@@ -200,13 +200,13 @@ function parseRobinhoodCSV(csvText: string): PortfolioData {
     }
   }
 
-  return { trades, cashFlows };
+  return { trades, cashFlows, format: 'robinhood' };
 }
 
 // Parse Fidelity CSV
 function parseFidelityCSV(csvText: string): PortfolioData {
   const rows = parseMultiLineCSV(csvText);
-  if (rows.length < 2) return { trades: [], cashFlows: [] };
+  if (rows.length < 2) return { trades: [], cashFlows: [], format: 'fidelity' };
 
   const header = rows[0].map(h => h.toLowerCase());
   const runDateIndex = header.indexOf('run date');
@@ -277,11 +277,21 @@ function parseFidelityCSV(csvText: string): PortfolioData {
       continue;
     }
 
-    // Handle 401k contributions (treated as buys)
+    // Handle 401k contributions (treated as buys + deposits)
     if (action === 'Contributions') {
+      // Record deposit cashFlow for the contribution amount
+      if (!isNaN(amount) && amount > 0) {
+        cashFlows.push({
+          id: `cashflow-${date}-${i}`,
+          date,
+          amount,
+          type: 'deposit',
+        });
+      }
+
       if (!symbol && values[header.indexOf('description')]) {
         // For 401k, symbol might be empty but description has fund name
-        // Skip these for now as they're typically target date funds
+        // Skip trade for these as they're typically target date funds
         continue;
       }
       if (!symbol || isNaN(quantity) || quantity <= 0) continue;
@@ -293,6 +303,20 @@ function parseFidelityCSV(csvText: string): PortfolioData {
         shares: quantity,
         type: 'buy',
         ...(isNaN(price) || price === 0 ? {} : { price }),
+      });
+      continue;
+    }
+
+    // Handle deposits
+    if (actionUpper.includes('ELECTRONIC FUNDS TRANSFER RECEIVED') ||
+        actionUpper.includes('TRANSFERRED FROM TO BROKERAGE')) {
+      if (isNaN(amount) || amount <= 0) continue;
+
+      cashFlows.push({
+        id: `cashflow-${date}-${i}`,
+        date,
+        amount,
+        type: 'deposit',
       });
       continue;
     }
@@ -314,22 +338,9 @@ function parseFidelityCSV(csvText: string): PortfolioData {
       continue;
     }
 
-    // Handle deposits
-    if (actionUpper.includes('ELECTRONIC FUNDS TRANSFER RECEIVED') ||
-        actionUpper.includes('TRANSFERRED FROM TO BROKERAGE')) {
-      if (isNaN(amount) || amount <= 0) continue;
-
-      cashFlows.push({
-        id: `cashflow-${date}-${i}`,
-        date,
-        amount,
-        type: 'deposit',
-      });
-      continue;
-    }
   }
 
-  return { trades, cashFlows };
+  return { trades, cashFlows, format: 'fidelity' };
 }
 
 // Parse Schwab Equity Vests CSV
@@ -391,7 +402,7 @@ function parseSchwabCSV(lines: string[]): PortfolioData {
     }
   }
 
-  return { trades, cashFlows };
+  return { trades, cashFlows, format: 'schwab' };
 }
 
 // Parse simple CSV format (ticker, date, shares, price)
@@ -449,7 +460,7 @@ function parseSimpleCSV(lines: string[]): PortfolioData {
     }
   }
 
-  return { trades, cashFlows };
+  return { trades, cashFlows, format: 'simple' };
 }
 
 export function parseCSV(csvText: string): PortfolioData {
@@ -463,29 +474,23 @@ export function parseCSV(csvText: string): PortfolioData {
   const header = parseCSVLine(lines[0]);
 
   let result: PortfolioData;
-  let format: CsvFormat;
   if (isRobinhoodFormat(header)) {
-    format = 'robinhood';
     perf.start('parseCSV:robinhood');
     result = parseRobinhoodCSV(csvText);
     perf.end('parseCSV:robinhood');
   } else if (isFidelityFormat(header)) {
-    format = 'fidelity';
     perf.start('parseCSV:fidelity');
     result = parseFidelityCSV(csvText);
     perf.end('parseCSV:fidelity');
   } else if (isSchwabFormat(header)) {
-    format = 'schwab';
     perf.start('parseCSV:schwab');
     result = parseSchwabCSV(lines);
     perf.end('parseCSV:schwab');
   } else {
-    format = 'simple';
     perf.start('parseCSV:simple');
     result = parseSimpleCSV(lines);
     perf.end('parseCSV:simple');
   }
-  result.format = format;
 
   perf.end('parseCSV:total');
   return result;
