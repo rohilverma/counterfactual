@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import type { PortfolioDataPoint } from '../types';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 
 interface ReturnChartProps {
   data: PortfolioDataPoint[];

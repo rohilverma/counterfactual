@@ -4,7 +4,11 @@ import {
   calculateStockBreakdown,
   calculateSummary,
 } from '../utils/calculations';
-import type { Trade, StockPrice, StockBreakdownData, CashFlow, StockSplit } from '../types';
+import type { Trade } from '../types/Trade';
+import type { CashFlow } from '../types/CashFlow';
+import type { StockPrice } from '../types/StockPrice';
+import type { StockBreakdownData } from '../types/StockBreakdownData';
+import type { StockSplit } from '../types/StockSplit';
 
 // Mock the logger to avoid fetch calls
 vi.mock('../utils/logger', () => ({

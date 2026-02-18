@@ -17,7 +17,7 @@
  * We need to un-adjust by multiplying by 0.1 (the splitFactor).
  */
 
-import type { StockSplit } from '../types';
+import type { StockSplit } from '../types/StockSplit';
 
 export const historicalSplits: Record<string, Omit<StockSplit, 'ticker'>[]> = {
   // TVIX - VelocityShares Daily 2x VIX Short Term ETN (delisted July 2020)

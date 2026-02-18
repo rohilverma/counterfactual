@@ -1,4 +1,10 @@
-import type { Trade, StockPrice, StockSplit, PortfolioDataPoint, StockBreakdownData, SummaryData, CashFlow } from '../types';
+import type { Trade } from '../types/Trade';
+import type { CashFlow } from '../types/CashFlow';
+import type { StockPrice } from '../types/StockPrice';
+import type { StockSplit } from '../types/StockSplit';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
+import type { StockBreakdownData } from '../types/StockBreakdownData';
+import type { SummaryData } from '../types/SummaryData';
 import { getPriceOnDate, getLatestPrice } from './stockApi';
 
 // Get price on or before date using sorted array (binary search approach)

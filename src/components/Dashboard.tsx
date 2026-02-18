@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { Trade, PortfolioData } from '../types';
+import type { Trade } from '../types/Trade';
+import type { PortfolioData } from '../types/PortfolioData';
 import { useStockData } from '../hooks/useStockData';
 import { FileUpload } from './FileUpload';
 import { ManualEntry } from './ManualEntry';
