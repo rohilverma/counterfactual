@@ -1,4 +1,4 @@
-import type { StockBreakdownData } from '../types';
+import type { StockBreakdownData } from '../types/StockBreakdownData';
 
 interface StockBreakdownProps {
   data: StockBreakdownData[];

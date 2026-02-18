@@ -1,5 +1,11 @@
 import { useState, useCallback } from 'react';
-import type { Trade, StockPrice, StockSplit, PortfolioDataPoint, StockBreakdownData, SummaryData, PortfolioData } from '../types';
+import type { Trade } from '../types/Trade';
+import type { PortfolioData } from '../types/PortfolioData';
+import type { StockPrice } from '../types/StockPrice';
+import type { StockSplit } from '../types/StockSplit';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
+import type { StockBreakdownData } from '../types/StockBreakdownData';
+import type { SummaryData } from '../types/SummaryData';
 import { fetchMultipleStocks, getHighPriceOnDate } from '../utils/stockApi';
 import {
   calculatePortfolioTimeSeries,

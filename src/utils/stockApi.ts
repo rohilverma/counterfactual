@@ -1,4 +1,6 @@
-import type { StockPrice, PriceCache, StockSplit } from '../types';
+import type { StockPrice } from '../types/StockPrice';
+import type { PriceCache } from '../types/PriceCache';
+import type { StockSplit } from '../types/StockSplit';
 import { perf } from './logger';
 
 const priceCache: PriceCache = {};

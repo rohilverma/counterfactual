@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { StockPrice } from '../types';
+import type { StockPrice } from '../types/StockPrice';
 
 // Mock the logger to avoid fetch calls
 vi.mock('../utils/logger', () => ({
@@ -221,7 +221,7 @@ describe('stock splits in API responses', () => {
 // ============================================================
 
 import { getDateRange } from '../utils/calculations';
-import type { Trade } from '../types';
+import type { Trade } from '../types/Trade';
 
 function makeTrade(ticker: string, date: string): Trade {
   return { id: `${ticker}-${date}`, ticker, date, shares: 10, price: 100, type: 'buy' };

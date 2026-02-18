@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { parseCSV } from '../utils/csvParser';
-import type { Trade, CashFlow } from '../types';
+import type { Trade } from '../types/Trade';
+import type { CashFlow } from '../types/CashFlow';
 
 // Mock the logger to avoid fetch calls in tests
 vi.mock('../utils/logger', () => ({

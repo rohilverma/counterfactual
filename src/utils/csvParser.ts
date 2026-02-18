@@ -1,4 +1,6 @@
-import type { Trade, CashFlow, PortfolioData, CashFlowType } from '../types';
+import type { Trade } from '../types/Trade';
+import type { CashFlow, CashFlowType } from '../types/CashFlow';
+import type { PortfolioData } from '../types/PortfolioData';
 import { perf } from './logger';
 
 // Parse CSV line handling quoted fields

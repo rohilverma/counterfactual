@@ -1,4 +1,4 @@
-import type { SummaryData } from '../types';
+import type { SummaryData } from '../types/SummaryData';
 
 interface SummaryStatsProps {
   data: SummaryData;

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Trade, TradeType } from '../types';
+import type { Trade, TradeType } from '../types/Trade';
 
 interface ManualEntryProps {
   onTradeAdded: (trade: Trade) => void;

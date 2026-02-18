@@ -8,7 +8,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import type { PortfolioDataPoint } from '../types';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 
 interface ComparisonChartProps {
   data: PortfolioDataPoint[];

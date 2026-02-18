@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
-import type { Trade, CashFlow, PortfolioData } from '../types';
+import type { Trade } from '../types/Trade';
+import type { CashFlow } from '../types/CashFlow';
+import type { PortfolioData } from '../types/PortfolioData';
 import { parseCSV, generateSampleCSV } from '../utils/csvParser';
 
 interface FileUploadProps {
