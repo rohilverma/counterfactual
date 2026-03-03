@@ -127,8 +127,8 @@ export function calculatePortfolioTimeSeries(
   const sortedCashFlows = [...cashFlows].sort((a, b) => a.date.localeCompare(b.date));
 
   // Build deposit-based SPY shares (what if each deposit was invested in SPY?)
-  // Filter to only deposits (not dividends, cap gains, etc.)
-  const deposits = cashFlows.filter(cf => cf.type === 'deposit');
+  // Filter to deposits and vests (not dividends, cap gains, etc.)
+  const deposits = cashFlows.filter(cf => cf.type === 'deposit' || cf.type === 'vest');
   const sortedDeposits = [...deposits].sort((a, b) => a.date.localeCompare(b.date));
 
   // Pre-calculate cumulative SPY shares from deposits by date
