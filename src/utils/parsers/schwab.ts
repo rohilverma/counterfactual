@@ -59,13 +59,25 @@ export function parseSchwabCSV(lines: string[]): PortfolioData {
       ...(isNaN(price) ? {} : { price }),
     });
 
-    // Synthesize a deposit for the vest value (shares * price)
+    // Synthesize a cashflow for the vest value
     if (!isNaN(price) && price > 0) {
+      // Price available in CSV — emit a deposit with the known amount
       cashFlows.push({
         id: `cashflow-${date}-${i}`,
         date,
         amount: quantity * price,
         type: 'deposit',
+      });
+    } else {
+      // No price in CSV — emit a vest placeholder to be resolved later
+      // using Yahoo Finance prices (see useStockData)
+      const tradeId = `${symbol}-${date}-${i}`;
+      cashFlows.push({
+        id: `vest-${tradeId}`,
+        date,
+        amount: 0,
+        type: 'vest',
+        ticker: symbol,
       });
     }
   }

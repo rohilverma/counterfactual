@@ -1,4 +1,4 @@
-export type CashFlowType = 'deposit' | 'dividend' | 'capgain' | 'interest';
+export type CashFlowType = 'deposit' | 'vest' | 'dividend' | 'capgain' | 'interest';
 
 export interface CashFlow {
   id: string;

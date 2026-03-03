@@ -6,7 +6,7 @@ import type { StockSplit } from '../types/StockSplit';
 import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 import type { SummaryData } from '../types/SummaryData';
-import { fetchMultipleStocks, getHighPriceOnDate } from '../utils/stockApi';
+import { fetchMultipleStocks, fetchStockData, getHighPriceOnDate } from '../utils/stockApi';
 import {
   calculatePortfolioTimeSeries,
   calculateStockBreakdown,
@@ -86,9 +86,45 @@ export function useStockData(): UseStockDataReturn {
       });
       perf.end('loadData:fillPrices');
 
+      // Resolve vest cashflows: the Schwab parser emits type:'vest' placeholders
+      // (amount 0) for vests without a price in the CSV.  Now that we have Yahoo
+      // prices, fill in the actual vest value from the matching trade.
+      // If the price is still missing (not in the bulk fetch), fetch individually.
+      const resolvedCashFlows = await Promise.all(cashFlows.map(async cf => {
+        if (cf.type !== 'vest' || cf.amount > 0) return cf;
+        const tradeId = cf.id.replace(/^vest-/, '');
+        const trade = tradesWithPrices.find(t => t.id === tradeId);
+        if (trade?.price) {
+          return { ...cf, amount: trade.shares * trade.price };
+        }
+        // Fallback: fetch price directly for this ticker/date
+        if (trade && cf.ticker) {
+          try {
+            const vestDate = new Date(cf.date + 'T12:00:00Z');
+            const start = new Date(vestDate);
+            start.setDate(start.getDate() - 7);
+            const end = new Date(vestDate);
+            end.setDate(end.getDate() + 1);
+            const { prices } = await fetchStockData(
+              cf.ticker,
+              start.toISOString().split('T')[0],
+              end.toISOString().split('T')[0],
+            );
+            const price = getHighPriceOnDate(prices, cf.date);
+            if (price) {
+              trade.price = price;
+              return { ...cf, amount: trade.shares * price };
+            }
+          } catch {
+            // Leave vest unresolved
+          }
+        }
+        return cf;
+      }));
+
       // Calculate all data
       perf.start('loadData:calculateTimeSeries');
-      const timeSeries = calculatePortfolioTimeSeries(tradesWithPrices, stockPrices, spyPrices, cashFlows, stockSplits);
+      const timeSeries = calculatePortfolioTimeSeries(tradesWithPrices, stockPrices, spyPrices, resolvedCashFlows, stockSplits);
       perf.end('loadData:calculateTimeSeries');
 
       perf.start('loadData:calculateBreakdown');
@@ -96,7 +132,7 @@ export function useStockData(): UseStockDataReturn {
       perf.end('loadData:calculateBreakdown');
 
       perf.start('loadData:calculateSummary');
-      const summary = calculateSummary(breakdown, cashFlows, tradesWithPrices);
+      const summary = calculateSummary(breakdown, resolvedCashFlows, tradesWithPrices);
       perf.end('loadData:calculateSummary');
 
       perf.end('loadData:total');

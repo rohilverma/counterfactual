@@ -275,12 +275,17 @@ describe('Schwab format', () => {
     expect(result.cashFlows[0].amount).toBe(25000); // 100 * 250
   });
 
-  it('does not synthesize a deposit when price is missing', () => {
+  it('emits a vest placeholder when price is missing', () => {
     const csv = `Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
 01/15/2023,Stock Plan Activity,MSFT,"Vest",100,,$0.00,`;
     const result = parseCSV(csv);
-    expect(result.cashFlows).toHaveLength(0);
+    expect(result.cashFlows).toHaveLength(1);
+    expect(result.cashFlows[0].type).toBe('vest');
+    expect(result.cashFlows[0].amount).toBe(0);
+    expect(result.cashFlows[0].ticker).toBe('MSFT');
+    expect(result.cashFlows[0].date).toBe('2023-01-15');
   });
+
 });
 
 // ============================================================
