@@ -1,0 +1,6 @@
+{
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/stock/:ticker", "destination": "/api/stock/[ticker]" }
+  ]
+}
