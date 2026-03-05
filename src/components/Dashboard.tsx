@@ -1,6 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import type { Trade } from '../types/Trade';
 import type { PortfolioData } from '../types/PortfolioData';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
+import type { StockBreakdownData } from '../types/StockBreakdownData';
+import type { SummaryData } from '../types/SummaryData';
 import { useStockData } from '../hooks/useStockData';
 import { FileUpload } from './FileUpload';
 import { ManualEntry } from './ManualEntry';
@@ -12,56 +16,102 @@ import { CsvBuilder } from './CsvBuilder';
 
 type InputMode = 'upload' | 'manual' | 'csv-builder';
 
+const INPUT_MODES: InputMode[] = ['upload', 'manual', 'csv-builder'];
+
+const emptyPortfolio: PortfolioData = { trades: [], cashFlows: [], format: 'simple' };
+
+interface TabResults {
+  timeSeriesData: PortfolioDataPoint[];
+  breakdownData: StockBreakdownData[];
+  summaryData: SummaryData | null;
+}
+
+const emptyResults: TabResults = { timeSeriesData: [], breakdownData: [], summaryData: null };
+
 export function Dashboard() {
   const [inputMode, setInputMode] = useState<InputMode>('upload');
-  const [portfolioData, setPortfolioData] = useState<PortfolioData>({ trades: [], cashFlows: [], format: 'simple' });
+  const [tabPortfolioData, setTabPortfolioData] = useState<Record<InputMode, PortfolioData>>({
+    upload: { ...emptyPortfolio },
+    manual: { ...emptyPortfolio },
+    'csv-builder': { ...emptyPortfolio },
+  });
+  const [tabResults, setTabResults] = useState<Record<InputMode, TabResults>>({
+    upload: { ...emptyResults },
+    manual: { ...emptyResults },
+    'csv-builder': { ...emptyResults },
+  });
+
   const { loading, error, timeSeriesData, breakdownData, summaryData, loadData, reset } = useStockData();
 
+  // Track which tab triggered the current load so we store results in the right tab
+  const loadingTabRef = useRef<InputMode>(inputMode);
+
+  // Sync useStockData results into the tab that triggered them
+  useEffect(() => {
+    if (loading) return;
+    const tab = loadingTabRef.current;
+    if (timeSeriesData.length > 0 && summaryData !== null) {
+      setTabResults(prev => ({
+        ...prev,
+        [tab]: { timeSeriesData, breakdownData, summaryData },
+      }));
+    }
+  }, [loading, timeSeriesData, breakdownData, summaryData]);
+
   const handleDataLoaded = useCallback((data: PortfolioData) => {
-    setPortfolioData(data);
+    setTabPortfolioData(prev => ({ ...prev, upload: data }));
     if (data.trades.length === 0) {
+      setTabResults(prev => ({ ...prev, upload: { ...emptyResults } }));
       reset();
     }
   }, [reset]);
 
   const handleTradeAdded = useCallback((trade: Trade) => {
-    setPortfolioData(prev => ({
+    setTabPortfolioData(prev => ({
       ...prev,
-      trades: [...prev.trades, trade],
+      manual: {
+        ...prev.manual,
+        trades: [...prev.manual.trades, trade],
+      },
     }));
   }, []);
 
   const handleAnalyze = useCallback(() => {
-    if (portfolioData.trades.length > 0) {
-      loadData(portfolioData);
+    const data = tabPortfolioData.manual;
+    if (data.trades.length > 0) {
+      loadingTabRef.current = 'manual';
+      loadData(data);
     }
-  }, [portfolioData, loadData]);
-
-  const switchMode = useCallback((mode: InputMode) => {
-    setInputMode(mode);
-    setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
-    reset();
-  }, [reset]);
+  }, [tabPortfolioData, loadData]);
 
   const handleClear = useCallback(() => {
-    setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
+    setTabPortfolioData(prev => ({ ...prev, manual: { ...emptyPortfolio } }));
+    setTabResults(prev => ({ ...prev, manual: { ...emptyResults } }));
     reset();
   }, [reset]);
 
-  // Debounce auto-analyze to wait for all files to be processed
+  // Auto-analyze for upload tab
   useEffect(() => {
-    if (portfolioData.trades.length === 0 || inputMode !== 'upload') {
+    const uploadData = tabPortfolioData.upload;
+    if (uploadData.trades.length === 0 || inputMode !== 'upload') {
       return;
     }
 
     const timer = setTimeout(() => {
-      loadData(portfolioData);
-    }, 100); // Wait 100ms for additional files
+      loadingTabRef.current = 'upload';
+      loadData(uploadData);
+    }, 100);
 
     return () => clearTimeout(timer);
-  }, [portfolioData, inputMode, loadData]);
+  }, [tabPortfolioData.upload, inputMode, loadData]);
 
-  const hasResults = timeSeriesData.length > 0 && summaryData !== null;
+  const activeResults = tabResults[inputMode];
+  const hasResults = activeResults.timeSeriesData.length > 0 && activeResults.summaryData !== null;
+
+  const tabIndex = INPUT_MODES.indexOf(inputMode);
+
+  const tabBaseClass = 'px-4 py-2 font-medium transition-all duration-150 cursor-pointer text-slate-500 hover:text-slate-700 outline-none';
+  const tabSelectedClass = 'border-b-2 border-blue-500 !text-blue-600';
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -76,47 +126,24 @@ export function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-6 mb-10">
-          <div className="flex border-b mb-6">
-            <button
-              onClick={() => switchMode('upload')}
-              className={`px-4 py-2 font-medium transition-all duration-150 ${
-                inputMode === 'upload'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Upload CSV
-            </button>
-            <button
-              onClick={() => switchMode('manual')}
-              className={`px-4 py-2 font-medium transition-all duration-150 ${
-                inputMode === 'manual'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Manual Entry
-            </button>
-            <button
-              onClick={() => switchMode('csv-builder')}
-              className={`px-4 py-2 font-medium transition-all duration-150 ${
-                inputMode === 'csv-builder'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              CSV Builder
-            </button>
-          </div>
+          <Tabs
+            selectedIndex={tabIndex}
+            onSelect={(index: number) => setInputMode(INPUT_MODES[index])}
+            forceRenderTabPanel={true}
+          >
+            <TabList className="flex border-b mb-6 list-none p-0 m-0">
+              <Tab className={tabBaseClass} selectedClassName={tabSelectedClass}>Upload CSV</Tab>
+              <Tab className={tabBaseClass} selectedClassName={tabSelectedClass}>Manual Entry</Tab>
+              <Tab className={tabBaseClass} selectedClassName={tabSelectedClass}>CSV Builder</Tab>
+            </TabList>
 
-          {inputMode === 'upload' ? (
-            <FileUpload onDataLoaded={handleDataLoaded} />
-          ) : inputMode === 'csv-builder' ? (
-            <CsvBuilder />
-          ) : (
-            <>
-              <ManualEntry onTradeAdded={handleTradeAdded} existingTrades={portfolioData.trades} />
-              {portfolioData.trades.length > 0 && (
+            <TabPanel className="hidden" selectedClassName="!block">
+              <FileUpload onDataLoaded={handleDataLoaded} />
+            </TabPanel>
+
+            <TabPanel className="hidden" selectedClassName="!block">
+              <ManualEntry onTradeAdded={handleTradeAdded} existingTrades={tabPortfolioData.manual.trades} />
+              {tabPortfolioData.manual.trades.length > 0 && (
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={handleAnalyze}
@@ -133,8 +160,12 @@ export function Dashboard() {
                   </button>
                 </div>
               )}
-            </>
-          )}
+            </TabPanel>
+
+            <TabPanel className="hidden" selectedClassName="!block">
+              <CsvBuilder />
+            </TabPanel>
+          </Tabs>
 
           {error && (
             <div className="mt-4 text-red-600 bg-red-50 p-3 rounded">
@@ -159,7 +190,7 @@ export function Dashboard() {
 
             <section className="mb-10">
               <h3 className="text-lg font-semibold text-slate-800 mb-5">Summary</h3>
-              <SummaryStats data={summaryData} />
+              <SummaryStats data={activeResults.summaryData!} />
             </section>
 
             <section className="mb-10">
@@ -167,7 +198,7 @@ export function Dashboard() {
                 Portfolio Value Over Time
               </h3>
               <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-4">
-                <ComparisonChart data={timeSeriesData} />
+                <ComparisonChart data={activeResults.timeSeriesData} />
               </div>
             </section>
 
@@ -176,7 +207,7 @@ export function Dashboard() {
                 Dollar-Weighted Return Over Time
               </h3>
               <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-4">
-                <ReturnChart data={timeSeriesData} />
+                <ReturnChart data={activeResults.timeSeriesData} />
               </div>
             </section>
 
@@ -184,7 +215,7 @@ export function Dashboard() {
               <h3 className="text-lg font-semibold text-slate-800 mb-5">
                 Per-Stock Breakdown
               </h3>
-              <StockBreakdown data={breakdownData} />
+              <StockBreakdown data={activeResults.breakdownData} />
             </section>
           </>
         )}
