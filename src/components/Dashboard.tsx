@@ -37,6 +37,12 @@ export function Dashboard() {
     }
   }, [portfolioData, loadData]);
 
+  const switchMode = useCallback((mode: InputMode) => {
+    setInputMode(mode);
+    setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
+    reset();
+  }, [reset]);
+
   const handleClear = useCallback(() => {
     setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
     reset();
@@ -72,7 +78,7 @@ export function Dashboard() {
         <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-6 mb-10">
           <div className="flex border-b mb-6">
             <button
-              onClick={() => setInputMode('upload')}
+              onClick={() => switchMode('upload')}
               className={`px-4 py-2 font-medium transition-all duration-150 ${
                 inputMode === 'upload'
                   ? 'border-b-2 border-blue-500 text-blue-600'
@@ -82,7 +88,7 @@ export function Dashboard() {
               Upload CSV
             </button>
             <button
-              onClick={() => setInputMode('manual')}
+              onClick={() => switchMode('manual')}
               className={`px-4 py-2 font-medium transition-all duration-150 ${
                 inputMode === 'manual'
                   ? 'border-b-2 border-blue-500 text-blue-600'
@@ -92,7 +98,7 @@ export function Dashboard() {
               Manual Entry
             </button>
             <button
-              onClick={() => setInputMode('csv-builder')}
+              onClick={() => switchMode('csv-builder')}
               className={`px-4 py-2 font-medium transition-all duration-150 ${
                 inputMode === 'csv-builder'
                   ? 'border-b-2 border-blue-500 text-blue-600'
