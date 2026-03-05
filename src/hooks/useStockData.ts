@@ -23,6 +23,7 @@ interface UseStockDataReturn {
   breakdownData: StockBreakdownData[];
   summaryData: SummaryData | null;
   loadData: (data: PortfolioData) => Promise<void>;
+  reset: () => void;
 }
 
 export function useStockData(): UseStockDataReturn {
@@ -147,6 +148,13 @@ export function useStockData(): UseStockDataReturn {
     }
   }, []);
 
+  const reset = useCallback(() => {
+    setTimeSeriesData([]);
+    setBreakdownData([]);
+    setSummaryData(null);
+    setError(null);
+  }, []);
+
   return {
     loading,
     error,
@@ -154,5 +162,6 @@ export function useStockData(): UseStockDataReturn {
     breakdownData,
     summaryData,
     loadData,
+    reset,
   };
 }

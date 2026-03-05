@@ -15,11 +15,14 @@ type InputMode = 'upload' | 'manual' | 'csv-builder';
 export function Dashboard() {
   const [inputMode, setInputMode] = useState<InputMode>('upload');
   const [portfolioData, setPortfolioData] = useState<PortfolioData>({ trades: [], cashFlows: [], format: 'simple' });
-  const { loading, error, timeSeriesData, breakdownData, summaryData, loadData } = useStockData();
+  const { loading, error, timeSeriesData, breakdownData, summaryData, loadData, reset } = useStockData();
 
   const handleDataLoaded = useCallback((data: PortfolioData) => {
     setPortfolioData(data);
-  }, []);
+    if (data.trades.length === 0) {
+      reset();
+    }
+  }, [reset]);
 
   const handleTradeAdded = useCallback((trade: Trade) => {
     setPortfolioData(prev => ({
@@ -36,7 +39,8 @@ export function Dashboard() {
 
   const handleClear = useCallback(() => {
     setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
-  }, []);
+    reset();
+  }, [reset]);
 
   // Debounce auto-analyze to wait for all files to be processed
   useEffect(() => {
