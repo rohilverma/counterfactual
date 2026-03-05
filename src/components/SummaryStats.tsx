@@ -20,16 +20,16 @@ export function SummaryStats({ data }: SummaryStatsProps) {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Total Invested</p>
-        <p className="text-2xl font-bold text-gray-800">
+    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="bg-white rounded-xl p-5 shadow-sm ring-1 ring-slate-100">
+        <p className="text-sm text-slate-500 mb-1">Total Invested</p>
+        <p className="text-2xl font-bold text-slate-800">
           {formatCurrency(data.totalCostBasis)}
         </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Portfolio Value</p>
+      <div className="bg-blue-50/60 rounded-xl p-5 shadow-sm ring-1 ring-blue-100">
+        <p className="text-sm text-slate-500 mb-1">Portfolio Value</p>
         <p className="text-2xl font-bold text-blue-600">
           {formatCurrency(data.totalPortfolioValue)}
         </p>
@@ -38,8 +38,8 @@ export function SummaryStats({ data }: SummaryStatsProps) {
         </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Deposits in S&P 500</p>
+      <div className="bg-emerald-50/60 rounded-xl p-5 shadow-sm ring-1 ring-emerald-100">
+        <p className="text-sm text-slate-500 mb-1">Deposits in S&P 500</p>
         <p className="text-2xl font-bold text-green-600">
           {formatCurrency(data.totalCounterfactualValue)}
         </p>
@@ -48,8 +48,12 @@ export function SummaryStats({ data }: SummaryStatsProps) {
         </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Difference vs S&P 500</p>
+      <div className={`rounded-xl p-5 shadow-sm ring-1 ${
+        isOutperforming
+          ? 'bg-emerald-50/60 ring-emerald-100'
+          : 'bg-red-50/60 ring-red-100'
+      }`}>
+        <p className="text-sm text-slate-500 mb-1">Difference vs S&P 500</p>
         <p
           className={`text-2xl font-bold ${
             isOutperforming ? 'text-green-600' : 'text-red-600'
@@ -68,8 +72,8 @@ export function SummaryStats({ data }: SummaryStatsProps) {
         </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Best vs S&P</p>
+      <div className="bg-white rounded-xl p-5 shadow-sm ring-1 ring-slate-100">
+        <p className="text-sm text-slate-500 mb-1">Best vs S&P</p>
         {data.bestPerformer ? (
           <p className="text-xl font-bold text-green-600">
             {data.bestPerformer.ticker}{' '}
@@ -78,12 +82,12 @@ export function SummaryStats({ data }: SummaryStatsProps) {
             </span>
           </p>
         ) : (
-          <p className="text-gray-400">-</p>
+          <p className="text-slate-400">-</p>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <p className="text-sm text-gray-500 mb-1">Worst vs S&P</p>
+      <div className="bg-white rounded-xl p-5 shadow-sm ring-1 ring-slate-100">
+        <p className="text-sm text-slate-500 mb-1">Worst vs S&P</p>
         {data.worstPerformer ? (
           <p className="text-xl font-bold text-red-600">
             {data.worstPerformer.ticker}{' '}
@@ -92,7 +96,7 @@ export function SummaryStats({ data }: SummaryStatsProps) {
             </span>
           </p>
         ) : (
-          <p className="text-gray-400">-</p>
+          <p className="text-slate-400">-</p>
         )}
       </div>
     </div>

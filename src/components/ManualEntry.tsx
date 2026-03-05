@@ -65,10 +65,10 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
           <button
             type="button"
             onClick={() => setTradeType('buy')}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+            className={`flex-1 py-2.5 px-5 rounded-xl font-medium transition-all duration-150 active:scale-[0.98] ${
               tradeType === 'buy'
                 ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             Buy
@@ -76,10 +76,10 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
           <button
             type="button"
             onClick={() => setTradeType('sell')}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+            className={`flex-1 py-2.5 px-5 rounded-xl font-medium transition-all duration-150 active:scale-[0.98] ${
               tradeType === 'sell'
                 ? 'bg-red-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             Sell
@@ -88,7 +88,7 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Ticker
             </label>
             <input
@@ -96,22 +96,22 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               placeholder="AAPL"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Date
             </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Shares
             </label>
             <input
@@ -121,12 +121,12 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
               placeholder="10"
               step="any"
               min="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Price <span className="text-gray-400 font-normal">(optional)</span>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Price <span className="text-slate-400 font-normal">(optional)</span>
             </label>
             <input
               type="number"
@@ -135,7 +135,7 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
               placeholder="Day high if blank"
               step="0.01"
               min="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
@@ -148,7 +148,7 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
 
         <button
           type="submit"
-          className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+          className="w-full py-2.5 px-5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl font-medium shadow-sm hover:shadow transition-all duration-150"
         >
           Add Trade
         </button>
@@ -156,14 +156,14 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
 
       {existingTrades.length > 0 && (
         <div className="mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">
             Trades ({existingTrades.length})
           </h4>
           <div className="space-y-1 max-h-40 overflow-y-auto">
             {existingTrades.map((trade) => (
               <div
                 key={trade.id}
-                className="text-sm bg-gray-50 px-3 py-2 rounded flex justify-between"
+                className="text-sm bg-slate-50 px-3 py-2 rounded flex justify-between"
               >
                 <span className="font-medium">
                   <span className={trade.type === 'sell' ? 'text-red-600' : 'text-green-600'}>
@@ -171,7 +171,7 @@ export function ManualEntry({ onTradeAdded, existingTrades }: ManualEntryProps) 
                   </span>
                   {' '}{trade.ticker}
                 </span>
-                <span className="text-gray-500">
+                <span className="text-slate-500">
                   {trade.shares} shares @ {trade.price ? `$${trade.price.toFixed(2)}` : 'day high'} on {trade.date}
                 </span>
               </div>

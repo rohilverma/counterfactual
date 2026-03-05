@@ -140,10 +140,10 @@ export function CsvBuilder() {
     <div className="space-y-4">
       {/* Upload Area */}
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-150 ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-blue-500 bg-blue-50 scale-[1.01]'
+            : 'border-slate-300 hover:border-slate-400'
         }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -161,7 +161,7 @@ export function CsvBuilder() {
         <label htmlFor="csv-builder-upload" className="cursor-pointer">
           <div className="space-y-2">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400"
+              className="mx-auto h-12 w-12 text-slate-400"
               stroke="currentColor"
               fill="none"
               viewBox="0 0 48 48"
@@ -173,13 +173,13 @@ export function CsvBuilder() {
                 strokeLinejoin="round"
               />
             </svg>
-            <div className="text-gray-600">
+            <div className="text-slate-600">
               <span className="text-blue-600 hover:text-blue-700 font-medium">
                 Drop CSV files here
               </span>
               {' '}or click to browse
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               Upload multiple CSV files to merge them together
             </p>
           </div>
@@ -188,9 +188,9 @@ export function CsvBuilder() {
 
       {/* Uploaded Files List */}
       {uploadedFiles.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-slate-50 rounded-lg p-4">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-slate-700">
               Uploaded Files
             </span>
             <button
@@ -208,10 +208,10 @@ export function CsvBuilder() {
               >
                 <span className="truncate font-mono">{file.name}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-gray-500">{file.rowCount} rows</span>
+                  <span className="text-slate-500">{file.rowCount} rows</span>
                   <button
                     onClick={() => removeFile(index)}
-                    className="text-gray-400 hover:text-red-600 text-lg leading-none"
+                    className="text-slate-400 hover:text-red-600 text-lg leading-none"
                   >
                     &times;
                   </button>
@@ -285,8 +285,8 @@ export function CsvBuilder() {
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <div className="font-mono text-gray-900">{dup.content}</div>
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="font-mono text-slate-900">{dup.content}</div>
+                    <div className="text-xs text-slate-500 mt-1">
                       {dup.file1}:{dup.row1}, {dup.file2}:{dup.row2}
                     </div>
                   </div>
@@ -302,12 +302,12 @@ export function CsvBuilder() {
 
       {/* Summary and Actions */}
       {uploadedFiles.length > 0 && (
-        <div className="flex items-center justify-between bg-gray-100 rounded-lg p-4">
-          <div className="text-sm text-gray-700">
+        <div className="flex items-center justify-between bg-slate-100 rounded-lg p-4">
+          <div className="text-sm text-slate-700">
             <span className="font-medium">Total:</span>{' '}
             {finalRowCount} rows
             {duplicatesRemoved > 0 && (
-              <span className="text-gray-500">
+              <span className="text-slate-500">
                 {' '}({duplicatesRemoved} duplicate{duplicatesRemoved !== 1 ? 's' : ''} removed)
               </span>
             )}
@@ -315,17 +315,17 @@ export function CsvBuilder() {
           <div className="flex gap-2">
             <button
               onClick={clearAll}
-              className="py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
+              className="py-2.5 px-5 bg-slate-200 hover:bg-slate-300 active:scale-[0.98] text-slate-700 rounded-xl transition-all duration-150"
             >
               Clear All
             </button>
             <button
               onClick={handleDownload}
               disabled={!canDownload}
-              className={`py-2 px-4 rounded-lg transition-colors font-medium ${
+              className={`py-2.5 px-5 rounded-xl font-medium transition-all duration-150 ${
                 canDownload
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
               Download Merged CSV

@@ -17,8 +17,8 @@ interface ComparisonChartProps {
 export function ComparisonChart({ data }: ComparisonChartProps) {
   if (data.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center bg-gray-50 rounded-lg">
-        <p className="text-gray-500">No data to display</p>
+      <div className="h-80 flex items-center justify-center bg-slate-50 rounded-lg">
+        <p className="text-slate-500">No data to display</p>
       </div>
     );
   }
@@ -44,18 +44,18 @@ export function ComparisonChart({ data }: ComparisonChartProps) {
           data={data}
           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" strokeOpacity={0.8} />
           <XAxis
             dataKey="date"
             tickFormatter={formatDate}
-            tick={{ fontSize: 12 }}
-            stroke="#6b7280"
+            tick={{ fontSize: 12, fontFamily: 'Inter' }}
+            stroke="#94a3b8"
             interval="preserveStartEnd"
           />
           <YAxis
             tickFormatter={formatCurrency}
-            tick={{ fontSize: 12 }}
-            stroke="#6b7280"
+            tick={{ fontSize: 12, fontFamily: 'Inter' }}
+            stroke="#94a3b8"
             width={80}
           />
           <Tooltip
@@ -63,8 +63,9 @@ export function ComparisonChart({ data }: ComparisonChartProps) {
             labelFormatter={(label) => new Date(label).toLocaleDateString()}
             contentStyle={{
               backgroundColor: 'white',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
+              border: 'none',
+              borderRadius: '12px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
           />
           <Legend />
@@ -75,7 +76,7 @@ export function ComparisonChart({ data }: ComparisonChartProps) {
             stroke="#3b82f6"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 5, strokeWidth: 2, stroke: 'white' }}
           />
           <Line
             type="monotone"
@@ -84,7 +85,7 @@ export function ComparisonChart({ data }: ComparisonChartProps) {
             stroke="#10b981"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 5, strokeWidth: 2, stroke: 'white' }}
           />
         </LineChart>
       </ResponsiveContainer>

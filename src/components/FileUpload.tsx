@@ -106,10 +106,10 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
   return (
     <div className="space-y-4">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-150 ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-blue-500 bg-blue-50 scale-[1.01]'
+            : 'border-slate-300 hover:border-slate-400'
         }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -130,7 +130,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         >
           <div className="space-y-2">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400"
+              className="mx-auto h-12 w-12 text-slate-400"
               stroke="currentColor"
               fill="none"
               viewBox="0 0 48 48"
@@ -142,13 +142,13 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
                 strokeLinejoin="round"
               />
             </svg>
-            <div className="text-gray-600">
+            <div className="text-slate-600">
               <span className="text-blue-600 hover:text-blue-700 font-medium">
                 Upload CSV files
               </span>
               {' '}or drag and drop
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               Supports multiple files. Schwab format or simple (ticker, date, shares, price)
             </p>
           </div>
@@ -156,9 +156,9 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
       </div>
 
       {uploadedFiles.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-3">
+        <div className="bg-slate-50 rounded-lg p-3">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-slate-700">
               {uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} ({totalTrades} trades)
             </span>
             <button
@@ -176,10 +176,10 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
               >
                 <span className="truncate">{file.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500">{file.trades.length} trades</span>
+                  <span className="text-slate-500">{file.trades.length} trades</span>
                   <button
                     onClick={() => removeFile(index)}
-                    className="text-gray-400 hover:text-red-600"
+                    className="text-slate-400 hover:text-red-600"
                   >
                     ×
                   </button>
@@ -198,7 +198,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
 
       <button
         onClick={loadSampleData}
-        className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+        className="w-full py-2.5 px-5 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 rounded-xl transition-all duration-150"
       >
         Load Sample Data
       </button>
