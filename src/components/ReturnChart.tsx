@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   LineChart,
   Line,
@@ -15,7 +16,7 @@ interface ReturnChartProps {
   data: PortfolioDataPoint[];
 }
 
-export function ReturnChart({ data }: ReturnChartProps) {
+export const ReturnChart = memo(function ReturnChart({ data }: ReturnChartProps) {
   if (data.length === 0) {
     return (
       <div className="h-80 flex items-center justify-center bg-slate-50 rounded-lg">
@@ -86,4 +87,4 @@ export function ReturnChart({ data }: ReturnChartProps) {
       </ResponsiveContainer>
     </div>
   );
-}
+});

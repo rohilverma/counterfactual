@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import type { SummaryData } from '../types/SummaryData';
 
 interface SummaryStatsProps {
   data: SummaryData;
 }
 
-export function SummaryStats({ data }: SummaryStatsProps) {
+export const SummaryStats = memo(function SummaryStats({ data }: SummaryStatsProps) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -101,4 +102,4 @@ export function SummaryStats({ data }: SummaryStatsProps) {
       </div>
     </div>
   );
-}
+});

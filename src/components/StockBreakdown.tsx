@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 
 interface StockBreakdownProps {
   data: StockBreakdownData[];
 }
 
-export function StockBreakdown({ data }: StockBreakdownProps) {
+export const StockBreakdown = memo(function StockBreakdown({ data }: StockBreakdownProps) {
   if (data.length === 0) {
     return (
       <div className="text-center py-8 text-slate-500">
@@ -96,4 +97,4 @@ export function StockBreakdown({ data }: StockBreakdownProps) {
       })}
     </div>
   );
-}
+});

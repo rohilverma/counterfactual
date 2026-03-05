@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   LineChart,
   Line,
@@ -14,7 +15,7 @@ interface ComparisonChartProps {
   data: PortfolioDataPoint[];
 }
 
-export function ComparisonChart({ data }: ComparisonChartProps) {
+export const ComparisonChart = memo(function ComparisonChart({ data }: ComparisonChartProps) {
   if (data.length === 0) {
     return (
       <div className="h-80 flex items-center justify-center bg-slate-50 rounded-lg">
@@ -91,4 +92,4 @@ export function ComparisonChart({ data }: ComparisonChartProps) {
       </ResponsiveContainer>
     </div>
   );
-}
+});
