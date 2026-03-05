@@ -90,6 +90,45 @@ function getUnadjustedPriceOnOrBefore(prices: StockPrice[], splits: StockSplit[]
   return resultPrice * factor;
 }
 
+const MAX_CHART_POINTS = 500;
+
+export function downsample(points: PortfolioDataPoint[], maxPoints: number): PortfolioDataPoint[] {
+  if (points.length <= maxPoints) return points;
+
+  // Try weekly (7 days), then keep doubling: 14, 28, 56, ...
+  let intervalDays = 7;
+  while (intervalDays < 100000) {
+    const sampled = sampleAtInterval(points, intervalDays);
+    if (sampled.length <= maxPoints) return sampled;
+    intervalDays *= 2;
+  }
+
+  return points; // fallback (shouldn't happen)
+}
+
+function sampleAtInterval(points: PortfolioDataPoint[], intervalDays: number): PortfolioDataPoint[] {
+  if (points.length === 0) return [];
+
+  const result: PortfolioDataPoint[] = [points[0]];
+  const intervalMs = intervalDays * 86400000;
+  let nextSampleAfter = new Date(points[0].date + 'T00:00:00').getTime() + intervalMs;
+
+  for (let i = 1; i < points.length; i++) {
+    const t = new Date(points[i].date + 'T00:00:00').getTime();
+    if (t >= nextSampleAfter) {
+      result.push(points[i]);
+      nextSampleAfter = t + intervalMs;
+    }
+  }
+
+  // Always include the last point
+  if (result[result.length - 1] !== points[points.length - 1]) {
+    result.push(points[points.length - 1]);
+  }
+
+  return result;
+}
+
 export function calculatePortfolioTimeSeries(
   trades: Trade[],
   stockPrices: Record<string, StockPrice[]>,
@@ -258,7 +297,7 @@ export function calculatePortfolioTimeSeries(
     }
   }
 
-  return dataPoints;
+  return downsample(dataPoints, 500);
 }
 
 export function calculateStockBreakdown(
