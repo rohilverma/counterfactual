@@ -149,18 +149,7 @@ export function Dashboard() {
 
         {hasResults && !loading && (
           <>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">Portfolio Analysis</h2>
-              <button
-                onClick={() => {
-                  setPortfolioData({ trades: [], cashFlows: [], format: 'simple' });
-                  window.location.reload();
-                }}
-                className="py-2.5 px-5 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 rounded-xl transition-all duration-150"
-              >
-                New Analysis
-              </button>
-            </div>
+            <h2 className="text-xl font-semibold text-slate-900 mb-6">Portfolio Analysis</h2>
 
             <section className="mb-10">
               <h3 className="text-lg font-semibold text-slate-800 mb-5">Summary</h3>
