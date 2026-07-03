@@ -21,6 +21,13 @@ export function parseCSVLine(line: string): string[] {
   return values;
 }
 
+// Detect a CUSIP — the 9-character alphanumeric identifier Fidelity uses for
+// bonds and Treasury bills — as opposed to an equity ticker symbol. Equity
+// tickers are never 9 characters, and every CUSIP contains at least one digit.
+export function isCusip(symbol: string): boolean {
+  return /^[0-9A-Z]{9}$/.test(symbol) && /[0-9]/.test(symbol);
+}
+
 // Convert MM/DD/YYYY to YYYY-MM-DD
 export function convertDateFormat(dateStr: string): string {
   // Handle "MM/DD/YYYY as of MM/DD/YYYY" format - use the "as of" date

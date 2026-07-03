@@ -1,5 +1,7 @@
 export interface SummaryData {
   totalCostBasis: number;
+  totalContributions: number; // Gross deposits/vests paid in (excludes withdrawals)
+  netContributions: number; // Deposits/vests net of withdrawals
   totalPortfolioValue: number;
   totalCounterfactualValue: number;
   portfolioReturn: number;

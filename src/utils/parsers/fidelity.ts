@@ -1,7 +1,7 @@
 import type { Trade } from '../../types/Trade';
 import type { CashFlow } from '../../types/CashFlow';
 import type { PortfolioData } from '../../types/PortfolioData';
-import { convertDateFormat, parseMultiLineCSV } from './shared';
+import { convertDateFormat, parseMultiLineCSV, isCusip } from './shared';
 
 // Detect if this is a Fidelity CSV
 export function isFidelityFormat(header: string[]): boolean {
@@ -50,6 +50,13 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
 
     const actionUpper = action.toUpperCase();
 
+    // Fixed income (bonds/T-bills) is listed by CUSIP and quoted per $100 face,
+    // so raw quantity x price does not equal dollar value and there is no market
+    // price feed. Store these in dollar terms instead: shares = |amount|, price = 1,
+    // so shares x price == the position's dollar value (at par/cost). The time
+    // series values missing CUSIP prices at par to match.
+    const isFixedIncome = isCusip(symbol) && !isNaN(amount) && amount !== 0;
+
     // Handle buy transactions
     if (actionUpper.startsWith('YOU BOUGHT') || actionUpper.startsWith('REINVESTMENT')) {
       if (!symbol || isNaN(quantity) || quantity <= 0) continue;
@@ -61,15 +68,17 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
         id: `${symbol}-${date}-${i}`,
         ticker: symbol,
         date,
-        shares: Math.abs(quantity),
+        shares: isFixedIncome ? Math.abs(amount) : Math.abs(quantity),
         type: 'buy',
-        ...(isNaN(price) || price === 0 ? {} : { price }),
+        ...(isFixedIncome ? { price: 1 } : (isNaN(price) || price === 0 ? {} : { price })),
       });
       continue;
     }
 
-    // Handle sell transactions
-    if (actionUpper.startsWith('YOU SOLD')) {
+    // Handle sell transactions.
+    // REDEMPTION PAYOUT covers maturing bonds/T-bills that are paid out at par;
+    // these carry a negative quantity, so treat them as sells to close the position.
+    if (actionUpper.startsWith('YOU SOLD') || actionUpper.startsWith('REDEMPTION PAYOUT')) {
       if (!symbol || isNaN(quantity)) continue;
 
       // Skip money market funds
@@ -79,9 +88,9 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
         id: `${symbol}-${date}-${i}`,
         ticker: symbol,
         date,
-        shares: Math.abs(quantity),
+        shares: isFixedIncome ? Math.abs(amount) : Math.abs(quantity),
         type: 'sell',
-        ...(isNaN(price) || price === 0 ? {} : { price }),
+        ...(isFixedIncome ? { price: 1 } : (isNaN(price) || price === 0 ? {} : { price })),
       });
       continue;
     }
@@ -120,6 +129,22 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
     if (actionUpper.includes('ELECTRONIC FUNDS TRANSFER RECEIVED') ||
         actionUpper.includes('TRANSFERRED FROM TO BROKERAGE')) {
       if (isNaN(amount) || amount <= 0) continue;
+
+      cashFlows.push({
+        id: `cashflow-${date}-${i}`,
+        date,
+        amount,
+        type: 'deposit',
+      });
+      continue;
+    }
+
+    // Handle withdrawals (money leaving the account).
+    // Recorded as a negative-amount deposit so it reduces cost basis and unwinds
+    // the SPY-equivalent shares in the benchmark comparison.
+    if (actionUpper.includes('ELECTRONIC FUNDS TRANSFER PAID') ||
+        actionUpper.includes('TRANSFERRED TO TO BROKERAGE')) {
+      if (isNaN(amount) || amount >= 0) continue;
 
       cashFlows.push({
         id: `cashflow-${date}-${i}`,

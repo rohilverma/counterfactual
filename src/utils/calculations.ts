@@ -6,6 +6,7 @@ import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 import type { SummaryData } from '../types/SummaryData';
 import { getPriceOnDate, getLatestPrice } from './stockApi';
+import { isCusip } from './parsers/shared';
 
 // Get price on or before date using sorted array (binary search approach)
 function getPriceOnOrBefore(prices: StockPrice[], targetDate: string): number | null {
@@ -237,11 +238,13 @@ export function calculatePortfolioTimeSeries(
       let currentStockPrice = priceMap?.get(currentDate);
       if (currentStockPrice === undefined) {
         // Fallback: get unadjusted price on or before current date
+        // Fixed-income CUSIPs have no market price feed; the parser stores them in
+        // dollar terms (shares = $ amount, price = 1), so value them at par (1).
         currentStockPrice = getUnadjustedPriceOnOrBefore(
           stockPrices[ticker] || [],
           splits[ticker] || [],
           currentDate
-        ) ?? 0;
+        ) ?? (isCusip(ticker) ? 1 : 0);
       }
       const tickerValue = shares * currentStockPrice;
       if (currentDate === debugDate) {
@@ -398,6 +401,8 @@ export function calculateSummary(
   if (breakdown.length === 0) {
     return {
       totalCostBasis: 0,
+      totalContributions: 0,
+      netContributions: 0,
       totalPortfolioValue: 0,
       totalCounterfactualValue: 0,
       portfolioReturn: 0,
@@ -423,6 +428,21 @@ export function calculateSummary(
       return sum + (t.type === 'sell' ? -amount : amount);
     }, 0);
     totalCostBasis = Math.max(0, totalCostBasis);
+  }
+
+  // Contributions = money the user paid in (deposits + vests), separate from
+  // dividends/cap gains. Total counts only positive contributions; net subtracts
+  // withdrawals (recorded as negative-amount deposits).
+  const contributionFlows = cashFlows.filter(cf => cf.type === 'deposit' || cf.type === 'vest');
+  let totalContributions = contributionFlows
+    .filter(cf => cf.amount > 0)
+    .reduce((sum, cf) => sum + cf.amount, 0);
+  let netContributions = contributionFlows.reduce((sum, cf) => sum + cf.amount, 0);
+  // Fall back to the trade-based cost basis when there are no contribution flows
+  // (e.g. trade-only imports), so the top line still shows something meaningful.
+  if (contributionFlows.length === 0) {
+    totalContributions = totalCostBasis;
+    netContributions = totalCostBasis;
   }
 
   const totalPortfolioValue = breakdown.reduce((sum, b) => sum + b.currentValue, 0);
@@ -453,6 +473,8 @@ export function calculateSummary(
 
   return {
     totalCostBasis: Math.round(totalCostBasis * 100) / 100,
+    totalContributions: Math.round(totalContributions * 100) / 100,
+    netContributions: Math.round(netContributions * 100) / 100,
     totalPortfolioValue: Math.round(totalPortfolioValue * 100) / 100,
     totalCounterfactualValue: Math.round(totalCounterfactualValue * 100) / 100,
     portfolioReturn: Math.round(portfolioReturn * 100) / 100,

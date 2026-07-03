@@ -23,10 +23,15 @@ export const SummaryStats = memo(function SummaryStats({ data }: SummaryStatsPro
   return (
     <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       <div className="bg-white rounded-xl p-5 shadow-sm ring-1 ring-slate-100">
-        <p className="text-sm text-slate-500 mb-1">Total Invested</p>
+        <p className="text-sm text-slate-500 mb-1">Total Contributions</p>
         <p className="text-2xl font-bold text-slate-800">
-          {formatCurrency(data.totalCostBasis)}
+          {formatCurrency(data.totalContributions)}
         </p>
+        {data.netContributions !== data.totalContributions && (
+          <p className="text-sm text-slate-500">
+            {formatCurrency(data.netContributions)} net of withdrawals
+          </p>
+        )}
       </div>
 
       <div className="bg-blue-50/60 rounded-xl p-5 shadow-sm ring-1 ring-blue-100">
