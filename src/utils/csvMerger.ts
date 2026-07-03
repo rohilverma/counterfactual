@@ -303,32 +303,63 @@ function formatRowForDisplay(row: string[], headers: string[]): string {
   return row.slice(0, 5).join(' | ');
 }
 
-// Find duplicate rows across files
+// Find duplicate rows across files.
+// Rows that repeat within a single file are legitimate (e.g. multiple RSU vests
+// on the same date with the same quantity). Only flag a row as duplicate when a
+// later file contributes more copies of a key than any single prior file already has.
 export function findDuplicates(files: UploadedFile[]): DuplicateInfo[] {
   if (files.length === 0) return [];
 
   const duplicates: DuplicateInfo[] = [];
-  const seen = new Map<string, { file: string; rowNum: number; row: string[] }>();
+
+  // For each key, track: max occurrences in any single prior file, and one
+  // representative row for display purposes.
+  const priorMaxCounts = new Map<string, number>();
+  const representative = new Map<string, { file: string; rowNum: number; row: string[] }>();
 
   for (const file of files) {
+    // Count occurrences of each key within this file
+    const fileKeyCounts = new Map<string, number>();
+    const fileKeyRows = new Map<string, { rowIdx: number; row: string[] }[]>();
+
     for (let rowIdx = 0; rowIdx < file.rows.length; rowIdx++) {
       const row = file.rows[rowIdx];
       const key = createDuplicateKey(row, file.headers);
-
       if (!key) continue;
 
-      const existing = seen.get(key);
-      if (existing) {
-        duplicates.push({
-          file1: existing.file,
-          row1: existing.rowNum + 1, // 1-indexed for display
-          file2: file.name,
-          row2: rowIdx + 1,
-          content: formatRowForDisplay(row, file.headers),
-          key,
-        });
-      } else {
-        seen.set(key, { file: file.name, rowNum: rowIdx, row });
+      fileKeyCounts.set(key, (fileKeyCounts.get(key) || 0) + 1);
+      if (!fileKeyRows.has(key)) fileKeyRows.set(key, []);
+      fileKeyRows.get(key)!.push({ rowIdx, row });
+    }
+
+    // Compare this file's counts against prior files
+    for (const [key, count] of fileKeyCounts) {
+      const priorMax = priorMaxCounts.get(key) || 0;
+      if (priorMax > 0) {
+        // Only the excess copies beyond what any single file already contributed are duplicates
+        const excessCount = Math.min(count, priorMax);
+        const rows = fileKeyRows.get(key)!;
+        const rep = representative.get(key)!;
+        for (let i = 0; i < excessCount; i++) {
+          const r = rows[i];
+          duplicates.push({
+            file1: rep.file,
+            row1: rep.rowNum + 1,
+            file2: file.name,
+            row2: r.rowIdx + 1,
+            content: formatRowForDisplay(r.row, file.headers),
+            key,
+          });
+        }
+      }
+    }
+
+    // Update prior max counts and representatives
+    for (const [key, count] of fileKeyCounts) {
+      priorMaxCounts.set(key, Math.max(priorMaxCounts.get(key) || 0, count));
+      if (!representative.has(key)) {
+        const rows = fileKeyRows.get(key)!;
+        representative.set(key, { file: file.name, rowNum: rows[0].rowIdx, row: rows[0].row });
       }
     }
   }
@@ -336,7 +367,10 @@ export function findDuplicates(files: UploadedFile[]): DuplicateInfo[] {
   return duplicates;
 }
 
-// Merge CSVs into one, optionally excluding duplicate keys
+// Merge CSVs into one, optionally excluding duplicate keys.
+// Rows that appear multiple times within a single file are preserved (legitimate
+// transactions like multiple RSU vests on the same date). Only cross-file
+// duplicates are removed.
 export function mergeCSVs(
   files: UploadedFile[],
   excludeKeys: Set<string> = new Set()
@@ -346,10 +380,14 @@ export function mergeCSVs(
   }
 
   const headers = files[0].headers;
-  const seenKeys = new Set<string>();
+  // Map from key -> count of times it appeared in *previous* files
+  const priorKeyCounts = new Map<string, number>();
   const rows: string[][] = [];
 
   for (const file of files) {
+    // Track how many times each key appears within this file
+    const fileKeyCounts = new Map<string, number>();
+
     for (const row of file.rows) {
       const key = createDuplicateKey(row, file.headers);
 
@@ -358,20 +396,64 @@ export function mergeCSVs(
         continue;
       }
 
-      // Skip if we've already seen this row (dedup within merge)
-      if (key && seenKeys.has(key)) {
-        continue;
-      }
-
       if (key) {
-        seenKeys.add(key);
+        const occurrenceInFile = (fileKeyCounts.get(key) || 0) + 1;
+        fileKeyCounts.set(key, occurrenceInFile);
+
+        // Only skip if a prior file already contributed this many copies
+        const priorCount = priorKeyCounts.get(key) || 0;
+        if (occurrenceInFile <= priorCount) {
+          continue;
+        }
       }
 
       rows.push(row);
     }
+
+    // Merge this file's counts into the prior counts (keep the max)
+    for (const [key, count] of fileKeyCounts) {
+      priorKeyCounts.set(key, Math.max(priorKeyCounts.get(key) || 0, count));
+    }
+  }
+
+  // Sort rows by date, most recent first
+  const dateIdx = findDateColumnIndex(headers);
+  if (dateIdx !== -1) {
+    rows.sort((a, b) => {
+      const da = parseDateForSort(a[dateIdx] || '');
+      const db = parseDateForSort(b[dateIdx] || '');
+      return db.localeCompare(da); // descending (most recent first)
+    });
   }
 
   return { headers, rows };
+}
+
+// Find the date column index from headers
+function findDateColumnIndex(headers: string[]): number {
+  const lowerHeaders = headers.map(h => h.toLowerCase());
+  // Try common date column names
+  for (const name of ['date', 'activity date', 'run date', 'trade date']) {
+    const idx = lowerHeaders.indexOf(name);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+// Parse a date string into YYYY-MM-DD for sorting
+function parseDateForSort(dateStr: string): string {
+  const trimmed = dateStr.trim();
+  // Handle "MM/DD/YYYY as of MM/DD/YYYY" — use the "as of" date
+  const asOfMatch = trimmed.match(/as of (\d{1,2}\/\d{1,2}\/\d{4})/);
+  const dateToUse = asOfMatch ? asOfMatch[1] : trimmed.split(' ')[0];
+
+  const match = dateToUse.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, month, day, year] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  // Already YYYY-MM-DD or unknown format — return as-is
+  return dateToUse;
 }
 
 // Escape a field for CSV output
