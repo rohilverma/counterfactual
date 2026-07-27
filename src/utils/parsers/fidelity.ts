@@ -39,6 +39,11 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
 
     // Handle ticker renames
     if (symbol === 'FB') symbol = 'META';
+    // Fidelity lists dual-class shares with no separator (e.g. HEICO Class A as
+    // "HEIA"), but Yahoo Finance uses a hyphen ("HEI-A"). Remap so price/split
+    // data can be fetched; otherwise the position is parsed but silently dropped
+    // for lack of a price feed.
+    if (symbol === 'HEIA') symbol = 'HEI-A';
 
     const priceRaw = values[priceIndex]?.replace(/[$,]/g, '');
     const quantityRaw = values[quantityIndex]?.replace(/,/g, '');
@@ -58,19 +63,33 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
     const isFixedIncome = isCusip(symbol) && !isNaN(amount) && amount !== 0;
 
     // Handle buy transactions
-    if (actionUpper.startsWith('YOU BOUGHT') || actionUpper.startsWith('REINVESTMENT')) {
+    const isReinvestment = actionUpper.startsWith('REINVESTMENT');
+    if (actionUpper.startsWith('YOU BOUGHT') || isReinvestment) {
       if (!symbol || isNaN(quantity) || quantity <= 0) continue;
 
       // Skip money market funds (cash equivalents)
       if (symbol === 'FDRXX' || symbol === 'SPAXX') continue;
 
+      // Reinvested dividends are added at zero cost basis. The dividend is
+      // already recorded as its own cash inflow, and brokerages (Fidelity)
+      // report a position's cost basis / total gain counting only actual cash
+      // purchases — reinvested shares are treated as zero-cost, so their full
+      // market value shows up as gain. Pinning price to an explicit 0 (rather
+      // than leaving it unset) keeps the downstream missing-price back-fill from
+      // assigning them a market cost.
       trades.push({
         id: `${symbol}-${date}-${i}`,
         ticker: symbol,
         date,
         shares: isFixedIncome ? Math.abs(amount) : Math.abs(quantity),
         type: 'buy',
-        ...(isFixedIncome ? { price: 1 } : (isNaN(price) || price === 0 ? {} : { price })),
+        ...(isReinvestment && !isFixedIncome
+          ? { price: 0 }
+          : isFixedIncome
+            ? { price: 1 }
+            : isNaN(price) || price === 0
+              ? {}
+              : { price }),
       });
       continue;
     }
@@ -91,6 +110,31 @@ export function parseFidelityCSV(csvText: string): PortfolioData {
         shares: isFixedIncome ? Math.abs(amount) : Math.abs(quantity),
         type: 'sell',
         ...(isFixedIncome ? { price: 1 } : (isNaN(price) || price === 0 ? {} : { price })),
+      });
+      continue;
+    }
+
+    // Handle share distributions from stock splits (e.g. NVDA's 10-for-1 split
+    // in June 2024, which Fidelity records as "DISTRIBUTION ... (Cash)" with a
+    // Type of "Shares"). The Quantity is the number of new shares added at no
+    // cash cost. Add them as a buy so the running share count reflects the
+    // post-split total, but pin the price to an explicit 0 so it contributes no
+    // cost basis and no benchmark SPY-equivalent shares. The explicit 0 (rather
+    // than leaving price unset) is important: downstream, missing prices are
+    // back-filled from the market feed, which would otherwise assign these free
+    // shares a full market cost. Yahoo's split data only un-adjusts historical
+    // prices, never share counts, so this does not double-count the split.
+    if (actionUpper.startsWith('DISTRIBUTION')) {
+      if (!symbol || isNaN(quantity) || quantity <= 0) continue;
+      if (symbol === 'FDRXX' || symbol === 'SPAXX') continue;
+
+      trades.push({
+        id: `${symbol}-${date}-${i}`,
+        ticker: symbol,
+        date,
+        shares: Math.abs(quantity),
+        type: 'buy',
+        price: 0,
       });
       continue;
     }

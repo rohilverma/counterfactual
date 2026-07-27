@@ -5,6 +5,7 @@ import type { StockSplit } from '../types/StockSplit';
 import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 import type { SummaryData } from '../types/SummaryData';
+import type { Decision, DecisionsResult } from '../types/Decision';
 import { getPriceOnDate, getLatestPrice } from './stockApi';
 import { isCusip } from './parsers/shared';
 
@@ -90,8 +91,6 @@ function getUnadjustedPriceOnOrBefore(prices: StockPrice[], splits: StockSplit[]
   const factor = getSplitAdjustmentFactor(sortedSplits, resultDate);
   return resultPrice * factor;
 }
-
-const MAX_CHART_POINTS = 500;
 
 export function downsample(points: PortfolioDataPoint[], maxPoints: number): PortfolioDataPoint[] {
   if (points.length <= maxPoints) return points;
@@ -303,6 +302,105 @@ export function calculatePortfolioTimeSeries(
   return downsample(dataPoints, 500);
 }
 
+export interface AnnualReturn {
+  year: number;
+  portfolioReturn: number;
+  counterfactualReturn: number;
+  // True when the year's data doesn't span roughly Jan 1 – Dec 31 (the first
+  // and last years are usually partial). The return is then over the covered
+  // portion only, not annualized.
+  partial: boolean;
+}
+
+// Money-weighted (Modified Dietz) return earned within each calendar year.
+//
+// The "Return Over Time" line is a single cumulative ratio since inception, so
+// it can't simply be sliced per year (each day's denominator is different). To
+// get a real per-year number we treat each calendar year as its own period:
+// beginning value carried in from the prior year, ending value at year end, and
+// contributions during the year time-weighted by when they landed. This mirrors
+// how the rest of the app reasons in dollars-in vs. value-now, and correctly
+// handles the first year (beginning value 0, so the denominator is the
+// time-weighted contributions rather than a divide-by-zero).
+//
+// Operates on the same PortfolioDataPoint series that feeds the chart, where
+// totalDeposits is the cumulative contributed capital on each date.
+export function calculateAnnualReturns(points: PortfolioDataPoint[]): AnnualReturn[] {
+  if (points.length === 0) return [];
+
+  const byYear = new Map<number, PortfolioDataPoint[]>();
+  const years: number[] = [];
+  for (const p of points) {
+    const year = Number(p.date.slice(0, 4));
+    let bucket = byYear.get(year);
+    if (!bucket) {
+      bucket = [];
+      byYear.set(year, bucket);
+      years.push(year);
+    }
+    bucket.push(p);
+  }
+  years.sort((a, b) => a - b);
+
+  const dayMs = 86400000;
+  const results: AnnualReturn[] = [];
+  let prevPoint: PortfolioDataPoint | null = null; // last data point of prior year
+
+  for (const year of years) {
+    const yearPoints = byYear.get(year)!;
+    const last = yearPoints[yearPoints.length - 1];
+
+    // Opening state carried in from the prior year (zero for the first year).
+    const beginPortfolio = prevPoint ? prevPoint.portfolioValue : 0;
+    const beginCounter = prevPoint ? prevPoint.counterfactualValue : 0;
+    const beginDeposits = prevPoint ? prevPoint.totalDeposits : 0;
+
+    // Period runs from the prior year's last point (or this year's first point
+    // for the very first year) to this year's last point.
+    const startDate = new Date((prevPoint ? prevPoint.date : yearPoints[0].date) + 'T00:00:00').getTime();
+    const endDate = new Date(last.date + 'T00:00:00').getTime();
+    const span = Math.max(endDate - startDate, dayMs);
+
+    // Each step's change in cumulative deposits is a contribution dated at that
+    // point, weighted by the fraction of the period still remaining after it.
+    let netContrib = 0;
+    let weightedPortfolioBase = beginPortfolio;
+    let weightedCounterBase = beginCounter;
+    let prevDeposits = beginDeposits;
+    for (const p of yearPoints) {
+      const inc = p.totalDeposits - prevDeposits;
+      prevDeposits = p.totalDeposits;
+      if (inc === 0) continue;
+      const t = new Date(p.date + 'T00:00:00').getTime();
+      const weight = (endDate - t) / span;
+      netContrib += inc;
+      weightedPortfolioBase += weight * inc;
+      weightedCounterBase += weight * inc;
+    }
+
+    const portfolioReturn = weightedPortfolioBase > 0
+      ? ((last.portfolioValue - beginPortfolio - netContrib) / weightedPortfolioBase) * 100
+      : 0;
+    const counterfactualReturn = weightedCounterBase > 0
+      ? ((last.counterfactualValue - beginCounter - netContrib) / weightedCounterBase) * 100
+      : 0;
+
+    const startsLate = !prevPoint && yearPoints[0].date.slice(5) > '01-07';
+    const endsEarly = last.date.slice(5) < '12-25';
+
+    results.push({
+      year,
+      portfolioReturn: Math.round(portfolioReturn * 100) / 100,
+      counterfactualReturn: Math.round(counterfactualReturn * 100) / 100,
+      partial: startsLate || endsEarly,
+    });
+
+    prevPoint = last;
+  }
+
+  return results;
+}
+
 export function calculateStockBreakdown(
   trades: Trade[],
   stockPrices: Record<string, StockPrice[]>,
@@ -311,44 +409,62 @@ export function calculateStockBreakdown(
   // Aggregate trades by ticker, handling buys and sells
   const aggregated: Record<string, {
     totalShares: number;
-    totalCost: number;  // Net cost (buys - sells)
     totalSpyShares: number;
     firstBuyDate: string;
+    // FIFO queue of the still-held cost-bearing lots (oldest first). Sells
+    // consume the oldest lots, so the remaining lots carry the cost basis of the
+    // shares still held. This matches how Fidelity reports cost basis / gain:
+    // basis is reduced by the cost of the shares sold (oldest first), not by the
+    // sale proceeds. Reinvested-dividend and split-distribution shares enter as
+    // zero-cost lots (price 0), so they add shares without adding cost basis.
+    lots: Array<{ shares: number; costPerShare: number }>;
   }> = {};
 
   const currentSpyPrice = getLatestPrice(spyPrices);
 
-  for (const trade of trades) {
+  // Process oldest-first so FIFO lot matching on sells is correct.
+  const sortedTrades = [...trades].sort((a, b) => a.date.localeCompare(b.date));
+
+  for (const trade of sortedTrades) {
     const tradePrice = trade.price ?? 0;
     const tradeAmount = trade.shares * tradePrice;
     const spyPriceAtTrade = getPriceOnDate(spyPrices, trade.date);
     const spySharesChange = spyPriceAtTrade ? tradeAmount / spyPriceAtTrade : 0;
 
-    // Use raw shares directly - SPL entries in the CSV already account for splits
-    // No split adjustment needed here
-    const shares = trade.shares;
-
     if (!aggregated[trade.ticker]) {
       aggregated[trade.ticker] = {
         totalShares: 0,
-        totalCost: 0,
         totalSpyShares: 0,
         firstBuyDate: trade.date,
+        lots: [],
       };
     }
+    const agg = aggregated[trade.ticker];
 
     if (trade.type === 'sell') {
-      aggregated[trade.ticker].totalShares -= shares;
-      aggregated[trade.ticker].totalCost -= tradeAmount;
-      aggregated[trade.ticker].totalSpyShares -= spySharesChange;
+      agg.totalShares -= trade.shares;
+      agg.totalSpyShares -= spySharesChange;
+
+      // Retire the oldest lots first (FIFO) up to the number of shares sold.
+      let remaining = trade.shares;
+      while (remaining > 1e-9 && agg.lots.length > 0) {
+        const lot = agg.lots[0];
+        if (lot.shares <= remaining + 1e-9) {
+          remaining -= lot.shares;
+          agg.lots.shift();
+        } else {
+          lot.shares -= remaining;
+          remaining = 0;
+        }
+      }
     } else {
-      aggregated[trade.ticker].totalShares += shares;
-      aggregated[trade.ticker].totalCost += tradeAmount;
-      aggregated[trade.ticker].totalSpyShares += spySharesChange;
+      agg.totalShares += trade.shares;
+      agg.totalSpyShares += spySharesChange;
+      agg.lots.push({ shares: trade.shares, costPerShare: tradePrice });
 
       // Track earliest buy date
-      if (trade.date < aggregated[trade.ticker].firstBuyDate) {
-        aggregated[trade.ticker].firstBuyDate = trade.date;
+      if (trade.date < agg.firstBuyDate) {
+        agg.firstBuyDate = trade.date;
       }
     }
   }
@@ -365,9 +481,11 @@ export function calculateStockBreakdown(
     const currentPrice = getLatestPrice(tickerPrices);
     const currentValue = data.totalShares * currentPrice;
     const spyCurrentValue = Math.max(0, data.totalSpyShares) * currentSpyPrice;
-    const avgBuyPrice = data.totalShares > 0 ? Math.max(0, data.totalCost) / data.totalShares : 0;
 
-    const netInvestment = Math.max(0, data.totalCost);
+    // Cost basis of the shares still held = sum of the remaining FIFO lots.
+    const netInvestment = data.lots.reduce((sum, lot) => sum + lot.shares * lot.costPerShare, 0);
+    const avgBuyPrice = data.totalShares > 0 ? netInvestment / data.totalShares : 0;
+
     const gain = currentValue - netInvestment;
     const spyGain = spyCurrentValue - netInvestment;
     const difference = gain - spyGain;
@@ -377,6 +495,7 @@ export function calculateStockBreakdown(
       shares: Math.round(data.totalShares * 1000000) / 1000000,
       buyDate: data.firstBuyDate,
       buyPrice: Math.round(avgBuyPrice * 100) / 100,
+      costBasis: Math.round(netInvestment * 100) / 100,
       currentPrice,
       currentValue: Math.round(currentValue * 100) / 100,
       spyShares: Math.round(Math.max(0, data.totalSpyShares) * 100) / 100,
@@ -391,6 +510,145 @@ export function calculateStockBreakdown(
   breakdown.sort((a, b) => b.difference - a.difference);
 
   return breakdown;
+}
+
+// Per-stock performance within a selected [startDate, endDate] window.
+//
+// Mirrors the conventions of calculateStockBreakdown but bounded to a window:
+// the "cost basis" is the position's market value at the window start plus the
+// net cash invested during the window (buys − sells), and the "current value"
+// is the remaining position valued at the window end. The SPY counterfactual
+// puts the same starting value and net flows into SPY over the same window.
+// Any ticker held at the window start OR traded during the window is included,
+// so positions opened or closed inside the window still show up (useful for
+// correlating returns with the buys/sells in the Decisions list).
+export function calculateStockBreakdownRange(
+  trades: Trade[],
+  stockPrices: Record<string, StockPrice[]>,
+  spyPrices: StockPrice[],
+  splits: Record<string, StockSplit[]>,
+  startDate: string,
+  endDate: string
+): StockBreakdownData[] {
+  const sortedTrades = [...trades].sort((a, b) => a.date.localeCompare(b.date));
+  const spyStart = getPriceOnOrBefore(spyPrices, startDate);
+  const spyEnd = getPriceOnOrBefore(spyPrices, endDate);
+
+  const tickers = [...new Set(sortedTrades.map(t => t.ticker))];
+  const breakdown: StockBreakdownData[] = [];
+
+  for (const ticker of tickers) {
+    const tickerTrades = sortedTrades.filter(t => t.ticker === ticker);
+
+    let sharesAtStart = 0;
+    for (const t of tickerTrades) {
+      if (t.date < startDate) sharesAtStart += t.type === 'sell' ? -t.shares : t.shares;
+    }
+    const windowTrades = tickerTrades.filter(t => t.date >= startDate && t.date <= endDate);
+
+    // Not involved in this window at all.
+    if (sharesAtStart <= 1e-9 && windowTrades.length === 0) continue;
+
+    let sharesAtEnd = sharesAtStart;
+    let netInvested = 0;   // cash put in over the window (buys − sells)
+    let spyFlowShares = 0; // SPY-equivalent shares from the window's flows
+    for (const t of windowTrades) {
+      const amount = t.shares * (t.price ?? 0);
+      const spyPriceAtTrade = getPriceOnOrBefore(spyPrices, t.date);
+      if (t.type === 'sell') {
+        sharesAtEnd -= t.shares;
+        netInvested -= amount;
+        if (spyPriceAtTrade) spyFlowShares -= amount / spyPriceAtTrade;
+      } else {
+        sharesAtEnd += t.shares;
+        netInvested += amount;
+        if (spyPriceAtTrade) spyFlowShares += amount / spyPriceAtTrade;
+      }
+    }
+
+    const startPrice = sharesAtStart > 0
+      ? (getUnadjustedPriceOnOrBefore(stockPrices[ticker] || [], splits[ticker] || [], startDate) ?? 0)
+      : 0;
+    const endPrice = getUnadjustedPriceOnOrBefore(stockPrices[ticker] || [], splits[ticker] || [], endDate) ?? 0;
+
+    const startValue = Math.max(0, sharesAtStart) * startPrice;
+    const endValue = Math.max(0, sharesAtEnd) * endPrice;
+
+    const costBasis = Math.max(0, startValue + netInvested);
+    const gain = endValue - costBasis;
+
+    // SPY counterfactual: the starting position value plus the window's net
+    // flows, invested in SPY and valued at the window end.
+    const spyStartShares = spyStart && startValue > 0 ? startValue / spyStart : 0;
+    const spyShares = spyStartShares + spyFlowShares;
+    const spyCurrentValue = Math.max(0, spyShares) * (spyEnd ?? 0);
+    const spyGain = spyCurrentValue - costBasis;
+
+    breakdown.push({
+      ticker,
+      shares: Math.round(Math.max(0, sharesAtEnd) * 1000000) / 1000000,
+      buyDate: startDate,
+      buyPrice: Math.round(startPrice * 100) / 100,
+      costBasis: Math.round(costBasis * 100) / 100,
+      currentPrice: Math.round(endPrice * 100) / 100,
+      currentValue: Math.round(endValue * 100) / 100,
+      spyShares: Math.round(Math.max(0, spyShares) * 100) / 100,
+      spyCurrentValue: Math.round(spyCurrentValue * 100) / 100,
+      gain: Math.round(gain * 100) / 100,
+      spyGain: Math.round(spyGain * 100) / 100,
+      difference: Math.round((gain - spyGain) * 100) / 100,
+    });
+  }
+
+  breakdown.sort((a, b) => b.difference - a.difference);
+  return breakdown;
+}
+
+// Collect the decisions (deposits, withdrawals, buys, sells) that fall within a
+// [startDate, endDate] window. Withdrawals are contribution flows recorded with
+// a negative amount.
+export function collectDecisions(
+  trades: Trade[],
+  cashFlows: CashFlow[],
+  startDate: string,
+  endDate: string
+): DecisionsResult {
+  const inRange = (date: string) => date >= startDate && date <= endDate;
+
+  const deposits: Decision[] = [];
+  const withdrawals: Decision[] = [];
+  for (const cf of cashFlows) {
+    if (!inRange(cf.date)) continue;
+    if (cf.type !== 'deposit' && cf.type !== 'vest') continue;
+    if (cf.amount < 0) {
+      withdrawals.push({ kind: 'withdrawal', date: cf.date, amount: cf.amount, ticker: cf.ticker });
+    } else {
+      deposits.push({ kind: 'deposit', date: cf.date, amount: cf.amount, ticker: cf.ticker });
+    }
+  }
+
+  const buys: Decision[] = [];
+  const sells: Decision[] = [];
+  for (const t of trades) {
+    if (!inRange(t.date)) continue;
+    const decision: Decision = {
+      kind: t.type === 'sell' ? 'sell' : 'buy',
+      date: t.date,
+      ticker: t.ticker,
+      shares: t.shares,
+      price: t.price,
+      amount: t.shares * (t.price ?? 0),
+    };
+    (t.type === 'sell' ? sells : buys).push(decision);
+  }
+
+  const byDate = (a: Decision, b: Decision) => a.date.localeCompare(b.date);
+  deposits.sort(byDate);
+  withdrawals.sort(byDate);
+  buys.sort(byDate);
+  sells.sort(byDate);
+
+  return { deposits, withdrawals, buys, sells };
 }
 
 export function calculateSummary(
@@ -475,6 +733,57 @@ export function calculateSummary(
     totalCostBasis: Math.round(totalCostBasis * 100) / 100,
     totalContributions: Math.round(totalContributions * 100) / 100,
     netContributions: Math.round(netContributions * 100) / 100,
+    totalPortfolioValue: Math.round(totalPortfolioValue * 100) / 100,
+    totalCounterfactualValue: Math.round(totalCounterfactualValue * 100) / 100,
+    portfolioReturn: Math.round(portfolioReturn * 100) / 100,
+    counterfactualReturn: Math.round(counterfactualReturn * 100) / 100,
+    totalDifference: Math.round(totalDifference * 100) / 100,
+    percentageDifference: Math.round(percentageDifference * 100) / 100,
+    bestPerformer: { ticker: bestPerformer.ticker, difference: bestPerformer.difference },
+    worstPerformer: { ticker: worstPerformer.ticker, difference: worstPerformer.difference },
+  };
+}
+
+// Summarize a subset of holdings directly from their breakdown rows. Used when
+// the user excludes specific holdings from the aggregate: the cost basis is the
+// sum of the included positions' per-stock basis (deposits can't be attributed
+// per ticker), and every total is derived from the included rows only.
+export function summarizeBreakdownSubset(breakdown: StockBreakdownData[]): SummaryData {
+  if (breakdown.length === 0) {
+    return {
+      totalCostBasis: 0,
+      totalContributions: 0,
+      netContributions: 0,
+      totalPortfolioValue: 0,
+      totalCounterfactualValue: 0,
+      portfolioReturn: 0,
+      counterfactualReturn: 0,
+      totalDifference: 0,
+      percentageDifference: 0,
+      bestPerformer: null,
+      worstPerformer: null,
+    };
+  }
+
+  const totalCostBasis = breakdown.reduce((sum, b) => sum + b.costBasis, 0);
+  const totalPortfolioValue = breakdown.reduce((sum, b) => sum + b.currentValue, 0);
+  const totalCounterfactualValue = breakdown.reduce((sum, b) => sum + b.spyCurrentValue, 0);
+  const portfolioReturn = totalCostBasis > 0 ? ((totalPortfolioValue - totalCostBasis) / totalCostBasis) * 100 : 0;
+  const counterfactualReturn = totalCostBasis > 0 ? ((totalCounterfactualValue - totalCostBasis) / totalCostBasis) * 100 : 0;
+  const totalDifference = totalPortfolioValue - totalCounterfactualValue;
+  const percentageDifference = totalCostBasis > 0 ? (totalDifference / totalCostBasis) * 100 : 0;
+
+  let bestPerformer = breakdown[0];
+  let worstPerformer = breakdown[0];
+  for (const stock of breakdown) {
+    if (stock.difference > bestPerformer.difference) bestPerformer = stock;
+    if (stock.difference < worstPerformer.difference) worstPerformer = stock;
+  }
+
+  return {
+    totalCostBasis: Math.round(totalCostBasis * 100) / 100,
+    totalContributions: Math.round(totalCostBasis * 100) / 100,
+    netContributions: Math.round(totalCostBasis * 100) / 100,
     totalPortfolioValue: Math.round(totalPortfolioValue * 100) / 100,
     totalCounterfactualValue: Math.round(totalCounterfactualValue * 100) / 100,
     portfolioReturn: Math.round(portfolioReturn * 100) / 100,

@@ -3,6 +3,7 @@ export interface StockBreakdownData {
   shares: number;
   buyDate: string;
   buyPrice: number;
+  costBasis: number;
   currentPrice: number;
   currentValue: number;
   spyShares: number;

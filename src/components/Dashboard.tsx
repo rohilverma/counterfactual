@@ -1,16 +1,20 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import type { Trade } from '../types/Trade';
 import type { PortfolioData } from '../types/PortfolioData';
 import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 import type { SummaryData } from '../types/SummaryData';
+import type { AnalysisSource } from '../types/AnalysisSource';
 import { useStockData } from '../hooks/useStockData';
+import { calculateStockBreakdownRange, collectDecisions, summarizeBreakdownSubset } from '../utils/calculations';
 import { FileUpload } from './FileUpload';
 import { ManualEntry } from './ManualEntry';
 import { ComparisonChart } from './ComparisonChart';
 import { ReturnChart } from './ReturnChart';
+import type { DateRange } from './ReturnChart';
 import { StockBreakdown } from './StockBreakdown';
+import { Decisions } from './Decisions';
 import { SummaryStats } from './SummaryStats';
 import { CsvBuilder } from './CsvBuilder';
 
@@ -24,9 +28,10 @@ interface TabResults {
   timeSeriesData: PortfolioDataPoint[];
   breakdownData: StockBreakdownData[];
   summaryData: SummaryData | null;
+  source: AnalysisSource | null;
 }
 
-const emptyResults: TabResults = { timeSeriesData: [], breakdownData: [], summaryData: null };
+const emptyResults: TabResults = { timeSeriesData: [], breakdownData: [], summaryData: null, source: null };
 
 export function Dashboard() {
   const [inputMode, setInputMode] = useState<InputMode>('upload');
@@ -41,7 +46,12 @@ export function Dashboard() {
     'csv-builder': { ...emptyResults },
   });
 
-  const { loading, error, timeSeriesData, breakdownData, summaryData, loadData, reset } = useStockData();
+  const { loading, error, timeSeriesData, breakdownData, summaryData, source, loadData, reset } = useStockData();
+
+  // Selected time period on the Return chart (null = full period).
+  const [selectedRange, setSelectedRange] = useState<DateRange | null>(null);
+  // Holdings the user has excluded from the aggregate totals.
+  const [excludedTickers, setExcludedTickers] = useState<Set<string>>(new Set());
 
   // Track which tab triggered the current load so we store results in the right tab
   const loadingTabRef = useRef<InputMode>(inputMode);
@@ -53,10 +63,10 @@ export function Dashboard() {
     if (timeSeriesData.length > 0 && summaryData !== null) {
       setTabResults(prev => ({
         ...prev,
-        [tab]: { timeSeriesData, breakdownData, summaryData },
+        [tab]: { timeSeriesData, breakdownData, summaryData, source },
       }));
     }
-  }, [loading, timeSeriesData, breakdownData, summaryData]);
+  }, [loading, timeSeriesData, breakdownData, summaryData, source]);
 
   const handleDataLoaded = useCallback((data: PortfolioData) => {
     setTabPortfolioData(prev => ({ ...prev, upload: data }));
@@ -107,6 +117,66 @@ export function Dashboard() {
 
   const activeResults = tabResults[inputMode];
   const hasResults = activeResults.timeSeriesData.length > 0 && activeResults.summaryData !== null;
+
+  const activeSource = activeResults.source;
+
+  // Reset the selected period and exclusions whenever the active dataset changes
+  // (switching tabs or re-running an analysis), so stale state can't linger.
+  useEffect(() => {
+    setSelectedRange(null);
+    setExcludedTickers(new Set());
+  }, [activeSource]);
+
+  const handleToggleExclude = useCallback((ticker: string) => {
+    setExcludedTickers(prev => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  }, []);
+
+  // Summary reflecting only the included holdings. When nothing is excluded we
+  // keep the original (deposits-based) summary so displayed numbers are stable.
+  const displaySummary = useMemo(() => {
+    const base = activeResults.summaryData;
+    if (!base || excludedTickers.size === 0) return base;
+    const included = activeResults.breakdownData.filter(b => !excludedTickers.has(b.ticker));
+    return summarizeBreakdownSubset(included);
+  }, [activeResults.summaryData, activeResults.breakdownData, excludedTickers]);
+
+  const handleSelectRange = useCallback((start: string, end: string) => {
+    setSelectedRange({ start, end });
+  }, []);
+  const handleClearRange = useCallback(() => setSelectedRange(null), []);
+
+  // The window the Decisions/breakdown sections describe: the selection if any,
+  // otherwise the full data span.
+  const effectiveRange = useMemo<DateRange | null>(() => {
+    const ts = activeResults.timeSeriesData;
+    if (ts.length === 0) return null;
+    if (selectedRange) return selectedRange;
+    return { start: ts[0].date, end: ts[ts.length - 1].date };
+  }, [activeResults.timeSeriesData, selectedRange]);
+
+  // Per-stock breakdown: windowed when a period is selected, otherwise the full
+  // as-computed breakdown.
+  const rangedBreakdown = useMemo(() => {
+    if (!selectedRange || !activeSource) return activeResults.breakdownData;
+    return calculateStockBreakdownRange(
+      activeSource.trades,
+      activeSource.stockPrices,
+      activeSource.spyPrices,
+      activeSource.splits,
+      selectedRange.start,
+      selectedRange.end,
+    );
+  }, [selectedRange, activeSource, activeResults.breakdownData]);
+
+  const decisions = useMemo(() => {
+    if (!activeSource || !effectiveRange) return null;
+    return collectDecisions(activeSource.trades, activeSource.cashFlows, effectiveRange.start, effectiveRange.end);
+  }, [activeSource, effectiveRange]);
 
   const tabIndex = INPUT_MODES.indexOf(inputMode);
 
@@ -189,8 +259,15 @@ export function Dashboard() {
             <h2 className="text-xl font-semibold text-slate-900 mb-6">Portfolio Analysis</h2>
 
             <section className="mb-10">
-              <h3 className="text-lg font-semibold text-slate-800 mb-5">Summary</h3>
-              <SummaryStats data={activeResults.summaryData!} />
+              <h3 className="text-lg font-semibold text-slate-800 mb-5">
+                Summary
+                {excludedTickers.size > 0 && (
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    · excluding {excludedTickers.size} holding{excludedTickers.size > 1 ? 's' : ''}
+                  </span>
+                )}
+              </h3>
+              <SummaryStats data={displaySummary!} />
             </section>
 
             <section className="mb-10">
@@ -204,18 +281,44 @@ export function Dashboard() {
 
             <section className="mb-10">
               <h3 className="text-lg font-semibold text-slate-800 mb-5">
-                Dollar-Weighted Return Over Time
+                Return Over Time
               </h3>
               <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-4">
-                <ReturnChart data={activeResults.timeSeriesData} />
+                <ReturnChart
+                  data={activeResults.timeSeriesData}
+                  selectedRange={selectedRange}
+                  onSelectRange={handleSelectRange}
+                  onClearRange={handleClearRange}
+                />
               </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-lg font-semibold text-slate-800 mb-5">
+                Per-Stock Breakdown
+                {selectedRange && (
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    · performance over selected period
+                  </span>
+                )}
+              </h3>
+              <StockBreakdown
+                data={rangedBreakdown}
+                excludedTickers={excludedTickers}
+                onToggleExclude={handleToggleExclude}
+              />
             </section>
 
             <section>
               <h3 className="text-lg font-semibold text-slate-800 mb-5">
-                Per-Stock Breakdown
+                Decisions
+                {selectedRange && (
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    · during selected period
+                  </span>
+                )}
               </h3>
-              <StockBreakdown data={activeResults.breakdownData} />
+              {decisions && <Decisions data={decisions} />}
             </section>
           </>
         )}

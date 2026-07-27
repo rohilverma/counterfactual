@@ -223,6 +223,20 @@ describe('Robinhood format', () => {
     expect(trade.shares).toBe(19);
   });
 
+  it('parses a four-figure buy price without truncating at the comma', () => {
+    // Regression: "$3,445.00" must parse as 3445, not 3 (parseFloat stops at ",").
+    const csv = `Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount
+06/29/2021,06/29/2021,07/01/2021,AMZN,Amazon,Buy,0.56,"$3,445.00","($1,929.20)"`;
+    expect(parseCSV(csv).trades[0].price).toBe(3445);
+  });
+
+  it('parses a comma-separated share quantity', () => {
+    // Regression: "1,000" must parse as 1000, not 1.
+    const csv = `Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount
+06/29/2021,06/29/2021,07/01/2021,AAPL,Apple Inc,Buy,"1,000",$150.00,"($150,000.00)"`;
+    expect(parseCSV(csv).trades[0].shares).toBe(1000);
+  });
+
   it('parses ACH deposits as cash flows', () => {
     const csv = `Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount
 01/10/2023,01/10/2023,01/10/2023,,ACH Deposit,ACH,,$0.00,"$1,000.00"`;
@@ -322,5 +336,41 @@ describe('Fidelity format', () => {
     const cf = parseCSV(csv).cashFlows[0];
     expect(cf.type).toBe('deposit');
     expect(cf.amount).toBe(5000);
+  });
+
+  it('adds split share distributions as a zero-cost buy', () => {
+    const csv = `Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+06/10/2024,DISTRIBUTION NVIDIA CORPORATION COM (NVDA) (Cash),NVDA,NVIDIA CORPORATION COM,Shares,241.182,,,,,29373.55,`;
+    const result = parseCSV(csv);
+    expect(result.trades).toHaveLength(1);
+    const trade = result.trades[0];
+    expect(trade.ticker).toBe('NVDA');
+    expect(trade.type).toBe('buy');
+    expect(trade.shares).toBeCloseTo(241.182);
+    // Explicit price 0 -> no cost basis and no benchmark SPY shares, and it
+    // survives the downstream missing-price back-fill (which only fills undefined).
+    expect(trade.price).toBe(0);
+    // A share distribution is not a cash event.
+    expect(result.cashFlows).toHaveLength(0);
+  });
+
+  it('adds reinvested dividends as a zero-cost-basis buy', () => {
+    const csv = `Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+08/17/2023,REINVESTMENT APPLE INC (AAPL) (Cash),AAPL,APPLE INC,Cash,0.013,178.13,,,,-2.40,`;
+    const trade = parseCSV(csv).trades[0];
+    expect(trade.ticker).toBe('AAPL');
+    expect(trade.type).toBe('buy');
+    expect(trade.shares).toBeCloseTo(0.013);
+    // Reinvested shares add to the position but carry no cost basis (Fidelity
+    // counts only cash purchases); the dividend is booked separately as income.
+    expect(trade.price).toBe(0);
+  });
+
+  it('remaps dual-class symbol HEIA to Yahoo symbol HEI-A', () => {
+    const csv = `Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+05/27/2025,YOU BOUGHT HEICO CORP NEW CL A (HEIA) (Cash),HEIA,HEICO CORP NEW CL A,Cash,10,216.24,0,,,"(2,162.40)",05/28/2025`;
+    const trade = parseCSV(csv).trades[0];
+    expect(trade.ticker).toBe('HEI-A');
+    expect(trade.shares).toBe(10);
   });
 });

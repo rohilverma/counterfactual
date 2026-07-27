@@ -3,7 +3,12 @@ import {
   calculatePortfolioTimeSeries,
   calculateStockBreakdown,
   calculateSummary,
+  calculateAnnualReturns,
+  calculateStockBreakdownRange,
+  collectDecisions,
+  summarizeBreakdownSubset,
 } from '../utils/calculations';
+import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { Trade } from '../types/Trade';
 import type { CashFlow } from '../types/CashFlow';
 import type { StockPrice } from '../types/StockPrice';
@@ -292,6 +297,37 @@ describe('calculateStockBreakdown', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('reduces cost basis FIFO (oldest lots first) on a partial sell', () => {
+    // Buy 10 @ $100, buy 10 @ $200, then sell 5. FIFO retires 5 shares of the
+    // oldest ($100) lot, leaving 5 @ $100 + 10 @ $200 = $2,500 basis for 15
+    // shares. (Proceeds-based accounting would wrongly give 2000+... = $2,250.)
+    const trades = [
+      makeTrade({ ticker: 'AAPL', date: '2023-01-02', shares: 10, price: 100 }),
+      makeTrade({ ticker: 'AAPL', date: '2023-01-03', shares: 10, price: 200, id: 'a2' }),
+      makeTrade({ ticker: 'AAPL', date: '2023-01-04', shares: 5, price: 150, type: 'sell', id: 'a3' }),
+    ];
+    const result = calculateStockBreakdown(trades, { AAPL: aaplPrices }, spyPrices);
+    const aapl = result[0];
+    expect(aapl.shares).toBe(15);
+    // 15 shares @ latest price 138 = 2070; basis 2500 -> gain -430
+    expect(aapl.gain).toBe(2070 - 2500);
+    expect(aapl.buyPrice).toBeCloseTo(2500 / 15, 2);
+  });
+
+  it('treats zero-cost (reinvested/split) shares as pure gain', () => {
+    // 10 cash-bought @ $100 plus 2 zero-cost reinvested shares. Basis stays
+    // $1,000; all 12 shares are valued at the current price.
+    const trades = [
+      makeTrade({ ticker: 'AAPL', date: '2023-01-02', shares: 10, price: 100 }),
+      makeTrade({ ticker: 'AAPL', date: '2023-01-03', shares: 2, price: 0, id: 'a2' }),
+    ];
+    const result = calculateStockBreakdown(trades, { AAPL: aaplPrices }, spyPrices);
+    const aapl = result[0];
+    expect(aapl.shares).toBe(12);
+    // 12 * 138 = 1656 value, basis 1000 -> gain 656
+    expect(aapl.gain).toBe(1656 - 1000);
+  });
+
   it('sorts by difference descending (best performer first)', () => {
     const googPrices: StockPrice[] = [
       { date: '2023-01-02', price: 90 },
@@ -324,12 +360,12 @@ describe('calculateSummary', () => {
   it('computes total portfolio value from breakdown', () => {
     const breakdown: StockBreakdownData[] = [
       {
-        ticker: 'AAPL', shares: 10, buyDate: '2023-01-02', buyPrice: 130,
+        ticker: 'AAPL', shares: 10, buyDate: '2023-01-02', buyPrice: 130, costBasis: 1300,
         currentPrice: 150, currentValue: 1500, spyShares: 3, spyCurrentValue: 1200,
         gain: 200, spyGain: -100, difference: 300,
       },
       {
-        ticker: 'GOOG', shares: 5, buyDate: '2023-01-02', buyPrice: 90,
+        ticker: 'GOOG', shares: 5, buyDate: '2023-01-02', buyPrice: 90, costBasis: 450,
         currentPrice: 100, currentValue: 500, spyShares: 1, spyCurrentValue: 400,
         gain: 50, spyGain: -50, difference: 100,
       },
@@ -342,12 +378,12 @@ describe('calculateSummary', () => {
   it('identifies best and worst performers', () => {
     const breakdown: StockBreakdownData[] = [
       {
-        ticker: 'WINNER', shares: 1, buyDate: '2023-01-01', buyPrice: 100,
+        ticker: 'WINNER', shares: 1, buyDate: '2023-01-01', buyPrice: 100, costBasis: 100,
         currentPrice: 200, currentValue: 200, spyShares: 1, spyCurrentValue: 120,
         gain: 100, spyGain: 20, difference: 80,
       },
       {
-        ticker: 'LOSER', shares: 1, buyDate: '2023-01-01', buyPrice: 100,
+        ticker: 'LOSER', shares: 1, buyDate: '2023-01-01', buyPrice: 100, costBasis: 100,
         currentPrice: 50, currentValue: 50, spyShares: 1, spyCurrentValue: 120,
         gain: -50, spyGain: 20, difference: -70,
       },
@@ -359,7 +395,7 @@ describe('calculateSummary', () => {
 
   it('computes portfolio return percentage from trades', () => {
     const breakdown: StockBreakdownData[] = [{
-      ticker: 'AAPL', shares: 10, buyDate: '2023-01-01', buyPrice: 100,
+      ticker: 'AAPL', shares: 10, buyDate: '2023-01-01', buyPrice: 100, costBasis: 1000,
       currentPrice: 120, currentValue: 1200, spyShares: 5, spyCurrentValue: 1100,
       gain: 200, spyGain: 100, difference: 100,
     }];
@@ -372,7 +408,7 @@ describe('calculateSummary', () => {
 
   it('computes counterfactual return percentage from trades', () => {
     const breakdown: StockBreakdownData[] = [{
-      ticker: 'AAPL', shares: 10, buyDate: '2023-01-01', buyPrice: 100,
+      ticker: 'AAPL', shares: 10, buyDate: '2023-01-01', buyPrice: 100, costBasis: 1000,
       currentPrice: 120, currentValue: 1200, spyShares: 5, spyCurrentValue: 1100,
       gain: 200, spyGain: 100, difference: 100,
     }];
@@ -381,5 +417,179 @@ describe('calculateSummary', () => {
     const result = calculateSummary(breakdown, [], trades);
     // (1100 - 1000) / 1000 * 100 = 10%
     expect(result.counterfactualReturn).toBe(10);
+  });
+});
+
+describe('calculateAnnualReturns', () => {
+  const makePoint = (
+    date: string,
+    portfolioValue: number,
+    counterfactualValue: number,
+    totalDeposits: number
+  ): PortfolioDataPoint => ({
+    date,
+    portfolioValue,
+    counterfactualValue,
+    totalDeposits,
+    portfolioReturn: 0,
+    counterfactualReturn: 0,
+  });
+
+  it('returns empty array for no data', () => {
+    expect(calculateAnnualReturns([])).toEqual([]);
+  });
+
+  it('computes a simple full-year return when no mid-year contributions', () => {
+    // Deposit $1000 on Jan 1; grows to $1200 by Dec 31. No further contributions.
+    const points = [
+      makePoint('2023-01-02', 1000, 1000, 1000),
+      makePoint('2023-06-30', 1100, 1050, 1000),
+      makePoint('2023-12-29', 1200, 1150, 1000),
+    ];
+    const [y] = calculateAnnualReturns(points);
+    expect(y.year).toBe(2023);
+    // (1200 - 0 - 1000) / 1000 = 20%
+    expect(y.portfolioReturn).toBeCloseTo(20, 1);
+    expect(y.counterfactualReturn).toBeCloseTo(15, 1);
+  });
+
+  it('carries the ending balance into the next year as the opening balance', () => {
+    const points = [
+      makePoint('2023-01-02', 1000, 1000, 1000),
+      makePoint('2023-12-29', 1200, 1200, 1000),
+      makePoint('2024-01-02', 1200, 1200, 1000),
+      makePoint('2024-12-30', 1500, 1300, 1000),
+    ];
+    const results = calculateAnnualReturns(points);
+    expect(results.map(r => r.year)).toEqual([2023, 2024]);
+    // 2024: opened at 1200, no new deposits, ended 1500 -> (1500-1200)/1200 = 25%
+    expect(results[1].portfolioReturn).toBeCloseTo(25, 1);
+  });
+
+  it('flags partial first and last years', () => {
+    const points = [
+      makePoint('2023-09-15', 1000, 1000, 1000),
+      makePoint('2023-12-29', 1100, 1050, 1000),
+      makePoint('2024-01-02', 1100, 1050, 1000),
+      makePoint('2024-06-30', 1200, 1100, 1000),
+    ];
+    const results = calculateAnnualReturns(points);
+    expect(results.find(r => r.year === 2023)!.partial).toBe(true); // starts in Sept
+    expect(results.find(r => r.year === 2024)!.partial).toBe(true); // ends in June
+  });
+
+  it('time-weights a mid-year contribution (Modified Dietz)', () => {
+    // Open at 0. $1000 deposited at the very start, $1000 more at mid-year.
+    // Ending value equals contributions (no gain) -> return must be ~0%.
+    const points = [
+      makePoint('2023-01-02', 1000, 1000, 1000),
+      makePoint('2023-07-02', 2000, 2000, 2000),
+      makePoint('2023-12-29', 2000, 2000, 2000),
+    ];
+    const [y] = calculateAnnualReturns(points);
+    expect(y.portfolioReturn).toBeCloseTo(0, 5);
+  });
+});
+
+describe('collectDecisions', () => {
+  const trades: Trade[] = [
+    makeTrade({ ticker: 'AAPL', date: '2023-01-05', shares: 10, price: 100 }),           // before window
+    makeTrade({ ticker: 'GOOG', date: '2023-03-10', shares: 4, price: 90, id: 'g1' }),    // buy in window
+    makeTrade({ ticker: 'AAPL', date: '2023-03-20', shares: 5, price: 130, type: 'sell', id: 'a2' }), // sell in window
+    makeTrade({ ticker: 'MSFT', date: '2023-06-01', shares: 3, price: 300, id: 'm1' }),   // after window
+  ];
+  const cashFlows: CashFlow[] = [
+    { id: 'd1', date: '2023-03-01', amount: 5000, type: 'deposit' },
+    { id: 'w1', date: '2023-03-15', amount: -1000, type: 'deposit' },
+    { id: 'd2', date: '2023-07-01', amount: 2000, type: 'deposit' }, // after window
+  ];
+
+  it('buckets deposits, withdrawals, buys, and sells within the window', () => {
+    const d = collectDecisions(trades, cashFlows, '2023-03-01', '2023-03-31');
+    expect(d.deposits.map(x => x.amount)).toEqual([5000]);
+    expect(d.withdrawals.map(x => x.amount)).toEqual([-1000]);
+    expect(d.buys.map(x => x.ticker)).toEqual(['GOOG']);
+    expect(d.sells.map(x => x.ticker)).toEqual(['AAPL']);
+  });
+
+  it('excludes events outside the window', () => {
+    const d = collectDecisions(trades, cashFlows, '2023-03-01', '2023-03-31');
+    expect(d.buys.find(x => x.ticker === 'MSFT')).toBeUndefined();
+    expect(d.deposits.find(x => x.amount === 2000)).toBeUndefined();
+  });
+});
+
+describe('calculateStockBreakdownRange', () => {
+  const spy: StockPrice[] = [
+    { date: '2023-01-02', price: 400 },
+    { date: '2023-03-01', price: 400 }, // flat SPY over the window
+    { date: '2023-06-30', price: 400 },
+  ];
+
+  it('computes window return for a position held across the window (no trades)', () => {
+    const prices: StockPrice[] = [
+      { date: '2023-01-02', price: 100 },
+      { date: '2023-03-01', price: 100 }, // start of window
+      { date: '2023-06-30', price: 150 }, // end of window: +50%
+    ];
+    const trades = [makeTrade({ ticker: 'AAPL', date: '2023-01-02', shares: 10, price: 100 })];
+
+    const [row] = calculateStockBreakdownRange(
+      trades, { AAPL: prices }, spy, {}, '2023-03-01', '2023-06-30',
+    );
+    expect(row.ticker).toBe('AAPL');
+    expect(row.costBasis).toBe(1000); // 10 sh * $100 at window start
+    expect(row.currentValue).toBe(1500); // 10 sh * $150 at window end
+    expect(row.gain).toBe(500);
+    // SPY flat over the window -> SPY counterfactual gain ~0, so stock beats SPY.
+    expect(row.spyGain).toBeCloseTo(0, 0);
+    expect(row.difference).toBeCloseTo(500, 0);
+  });
+
+  it('excludes tickers neither held at start nor traded during the window', () => {
+    const prices: StockPrice[] = [
+      { date: '2023-06-01', price: 50 },
+      { date: '2023-06-30', price: 60 },
+    ];
+    const trades = [makeTrade({ ticker: 'LATE', date: '2023-06-01', shares: 2, price: 50 })];
+    const rows = calculateStockBreakdownRange(
+      trades, { LATE: prices }, spy, {}, '2023-03-01', '2023-05-31',
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe('summarizeBreakdownSubset', () => {
+  const rows: StockBreakdownData[] = [
+    { ticker: 'AAPL', shares: 10, buyDate: '2023-01-01', buyPrice: 100, costBasis: 1000,
+      currentPrice: 120, currentValue: 1200, spyShares: 2, spyCurrentValue: 1100,
+      gain: 200, spyGain: 100, difference: 100 },
+    { ticker: 'MEME', shares: 5, buyDate: '2023-01-01', buyPrice: 200, costBasis: 1000,
+      currentPrice: 60, currentValue: 300, spyShares: 2, spyCurrentValue: 1100,
+      gain: -700, spyGain: 100, difference: -800 },
+  ];
+
+  it('sums totals from the included rows only', () => {
+    const s = summarizeBreakdownSubset(rows);
+    expect(s.totalCostBasis).toBe(2000);
+    expect(s.totalPortfolioValue).toBe(1500);
+    expect(s.totalCounterfactualValue).toBe(2200);
+    // (1500 - 2000) / 2000 * 100
+    expect(s.portfolioReturn).toBe(-25);
+    expect(s.totalDifference).toBe(-700);
+  });
+
+  it('excluding the loser lifts the totals', () => {
+    const s = summarizeBreakdownSubset(rows.filter(r => r.ticker !== 'MEME'));
+    expect(s.totalCostBasis).toBe(1000);
+    expect(s.totalPortfolioValue).toBe(1200);
+    expect(s.portfolioReturn).toBe(20);
+    expect(s.bestPerformer?.ticker).toBe('AAPL');
+  });
+
+  it('returns zeros when everything is excluded', () => {
+    const s = summarizeBreakdownSubset([]);
+    expect(s.totalPortfolioValue).toBe(0);
+    expect(s.bestPerformer).toBeNull();
   });
 });

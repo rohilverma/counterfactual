@@ -62,8 +62,10 @@ export function parseRobinhoodCSV(csvText: string): PortfolioData {
     // Handle ticker renames
     if (ticker === 'FB') ticker = 'META';
 
-    const quantityRaw = values[quantityIndex];
-    const priceRaw = values[priceIndex]?.replace('$', '');
+    // Strip thousands separators (and the $ from price) before parsing, otherwise
+    // parseFloat truncates at the first comma: "$3,445.00" -> 3, "1,000" -> 1.
+    const quantityRaw = values[quantityIndex]?.replace(/,/g, '');
+    const priceRaw = values[priceIndex]?.replace(/[$,]/g, '');
 
     const quantity = parseFloat(quantityRaw);
     const price = priceRaw ? parseFloat(priceRaw) : NaN;

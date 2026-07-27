@@ -6,6 +6,7 @@ import type { StockSplit } from '../types/StockSplit';
 import type { PortfolioDataPoint } from '../types/PortfolioDataPoint';
 import type { StockBreakdownData } from '../types/StockBreakdownData';
 import type { SummaryData } from '../types/SummaryData';
+import type { AnalysisSource } from '../types/AnalysisSource';
 import { fetchMultipleStocks, fetchStockData, getHighPriceOnDate } from '../utils/stockApi';
 import {
   calculatePortfolioTimeSeries,
@@ -22,6 +23,7 @@ interface UseStockDataReturn {
   timeSeriesData: PortfolioDataPoint[];
   breakdownData: StockBreakdownData[];
   summaryData: SummaryData | null;
+  source: AnalysisSource | null;
   loadData: (data: PortfolioData) => Promise<void>;
   reset: () => void;
 }
@@ -32,6 +34,7 @@ export function useStockData(): UseStockDataReturn {
   const [timeSeriesData, setTimeSeriesData] = useState<PortfolioDataPoint[]>([]);
   const [breakdownData, setBreakdownData] = useState<StockBreakdownData[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
+  const [source, setSource] = useState<AnalysisSource | null>(null);
 
   const loadData = useCallback(async (data: PortfolioData) => {
     const { trades, cashFlows } = data;
@@ -141,6 +144,13 @@ export function useStockData(): UseStockDataReturn {
       setTimeSeriesData(timeSeries);
       setBreakdownData(breakdown);
       setSummaryData(summary);
+      setSource({
+        trades: tradesWithPrices,
+        cashFlows: resolvedCashFlows,
+        stockPrices,
+        spyPrices,
+        splits: stockSplits,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load stock data');
     } finally {
@@ -152,6 +162,7 @@ export function useStockData(): UseStockDataReturn {
     setTimeSeriesData([]);
     setBreakdownData([]);
     setSummaryData(null);
+    setSource(null);
     setError(null);
   }, []);
 
@@ -161,6 +172,7 @@ export function useStockData(): UseStockDataReturn {
     timeSeriesData,
     breakdownData,
     summaryData,
+    source,
     loadData,
     reset,
   };
