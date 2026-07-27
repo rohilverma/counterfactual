@@ -122,10 +122,14 @@ export function Dashboard() {
 
   // Reset the selected period and exclusions whenever the active dataset changes
   // (switching tabs or re-running an analysis), so stale state can't linger.
-  useEffect(() => {
-    setSelectedRange(null);
-    setExcludedTickers(new Set());
-  }, [activeSource]);
+  // Uses React's documented "adjust state when a value changes during render"
+  // pattern (previous value tracked in state) instead of an effect.
+  const [prevSource, setPrevSource] = useState(activeSource);
+  if (prevSource !== activeSource) {
+    setPrevSource(activeSource);
+    if (selectedRange !== null) setSelectedRange(null);
+    if (excludedTickers.size > 0) setExcludedTickers(new Set());
+  }
 
   const handleToggleExclude = useCallback((ticker: string) => {
     setExcludedTickers(prev => {
